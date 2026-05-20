@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
 import { createId, now } from '../helpers';
 import { IndexingRun, IndexingRunSchema } from '../../../domain/entities/IndexingRun';
+import { IIndexingRunRepository } from '../../../domain/repositories/interfaces';
 
-export class IndexingRunRepository {
+export class IndexingRunRepository implements IIndexingRunRepository {
   constructor(private readonly db: Database.Database) {}
 
   public createRun(projectId: string, schemaVersion: string, sourceCount = 0): IndexingRun {

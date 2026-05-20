@@ -1,6 +1,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { PathSanitizer } from './PathSanitizer';
+import { SecretScanner } from './SecretScanner';
 
 export interface IndexingSourceInput {
   path: string;
@@ -137,19 +138,6 @@ export class IndexingInputGuard {
   }
 
   private redactSecrets(value: string): string {
-    const patterns: Array<[RegExp, string]> = [
-      [/-----BEGIN [^-]+PRIVATE KEY-----[\s\S]*?-----END [^-]+PRIVATE KEY-----/g, '[REDACTED_SECRET]'],
-      [/\bAKIA[0-9A-Z]{16}\b/g, '[REDACTED_SECRET]'],
-      [/\b(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{20,}\b/g, '[REDACTED_SECRET]'],
-      [/\bxox[baprs]-[A-Za-z0-9-]{10,}\b/g, '[REDACTED_SECRET]'],
-      [/\b(?:api[_-]?key|token|secret|password)\s*[:=]\s*([^\s'"`]+)\b/gi, '[REDACTED_SECRET]'],
-      [/\b(?:YOUR|TEST|FAKE)[-_]?(?:API[_-]?KEY|TOKEN|SECRET|PASSWORD)\b/gi, '[REDACTED_SECRET]']
-    ];
-
-    let redacted = value;
-    for (const [pattern, replacement] of patterns) {
-      redacted = redacted.replace(pattern, replacement);
-    }
-    return redacted;
+    return SecretScanner.redact(value);
   }
 }

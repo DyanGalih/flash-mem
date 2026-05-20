@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
 import { createId, now, normalizeProjectPath } from '../helpers';
 import { Project, ProjectSchema } from '../../../domain/entities/Project';
+import { IProjectRepository } from '../../../domain/repositories/interfaces';
 
-export class ProjectRepository {
+export class ProjectRepository implements IProjectRepository {
   constructor(private readonly db: Database.Database) {}
 
   public upsertByRootPath(rootPath: string, name: string): Project {

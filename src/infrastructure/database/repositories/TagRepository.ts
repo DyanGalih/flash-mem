@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
 import { createId, now, normalizeName } from '../helpers';
 import { Tag, TagSchema } from '../../../domain/entities/Tag';
+import { ITagRepository } from '../../../domain/repositories/interfaces';
 
-export class TagRepository {
+export class TagRepository implements ITagRepository {
   constructor(private readonly db: Database.Database) {}
 
   public getOrCreate(projectId: string, name: string): Tag {

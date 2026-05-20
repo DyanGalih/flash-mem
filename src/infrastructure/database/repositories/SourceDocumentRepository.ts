@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
 import { createId, now } from '../helpers';
 import { SourceDocument, SourceDocumentSchema } from '../../../domain/entities/SourceDocument';
+import { ISourceDocumentRepository } from '../../../domain/repositories/interfaces';
 
-export class SourceDocumentRepository {
+export class SourceDocumentRepository implements ISourceDocumentRepository {
   constructor(private readonly db: Database.Database) {}
 
   public upsert(projectId: string, path: string, checksum: string, lastIndexedAt: number | null = null): SourceDocument {
@@ -59,5 +60,28 @@ export class SourceDocumentRepository {
     `).get(projectId, path) as SourceDocument | undefined;
 
     return row ? SourceDocumentSchema.parse(row) : null;
+  }
+
+  public findById(sourceDocumentId: string): SourceDocument | null {
+    const row = this.db.prepare(`
+      SELECT id, project_id AS projectId, path, checksum, last_indexed_at AS lastIndexedAt,
+             created_at AS createdAt, updated_at AS updatedAt
+      FROM source_documents
+      WHERE id = ?
+    `).get(sourceDocumentId) as SourceDocument | undefined;
+
+    return row ? SourceDocumentSchema.parse(row) : null;
+  }
+
+  public listByProject(projectId: string): SourceDocument[] {
+    const rows = this.db.prepare(`
+      SELECT id, project_id AS projectId, path, checksum, last_indexed_at AS lastIndexedAt,
+             created_at AS createdAt, updated_at AS updatedAt
+      FROM source_documents
+      WHERE project_id = ?
+      ORDER BY path ASC
+    `).all(projectId) as SourceDocument[];
+
+    return rows.map((row) => SourceDocumentSchema.parse(row));
   }
 }

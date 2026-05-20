@@ -1,7 +1,9 @@
 import Database from 'better-sqlite3';
-import { IndexingRunRepository } from '../../infrastructure/database/repositories/IndexingRunRepository';
-import { ProjectRepository } from '../../infrastructure/database/repositories/ProjectRepository';
-import { SourceDocumentRepository } from '../../infrastructure/database/repositories/SourceDocumentRepository';
+import {
+  IProjectRepository,
+  ISourceDocumentRepository,
+  IIndexingRunRepository
+} from '../../domain/repositories/interfaces';
 import { MemoryEntryService } from './MemoryEntryService';
 import { SchemaMigrationService } from './SchemaMigrationService';
 import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
@@ -16,21 +18,15 @@ export interface IndexSourceInput {
 }
 
 export class IndexingService {
-  private readonly sourceDocumentRepository: SourceDocumentRepository;
-  private readonly indexingRunRepository: IndexingRunRepository;
-  private readonly projectRepository: ProjectRepository;
-  private readonly memoryEntryService: MemoryEntryService;
-  private readonly schemaMigrationService: SchemaMigrationService;
-  private readonly indexingInputGuard: IndexingInputGuard;
-
-  constructor(private readonly db: Database.Database) {
-    this.sourceDocumentRepository = new SourceDocumentRepository(db);
-    this.indexingRunRepository = new IndexingRunRepository(db);
-    this.projectRepository = new ProjectRepository(db);
-    this.memoryEntryService = new MemoryEntryService(db);
-    this.schemaMigrationService = new SchemaMigrationService(db);
-    this.indexingInputGuard = new IndexingInputGuard();
-  }
+  constructor(
+    private readonly db: Database.Database,
+    private readonly projectRepository: IProjectRepository,
+    private readonly sourceDocumentRepository: ISourceDocumentRepository,
+    private readonly indexingRunRepository: IIndexingRunRepository,
+    private readonly memoryEntryService: MemoryEntryService,
+    private readonly schemaMigrationService: SchemaMigrationService,
+    private readonly indexingInputGuard: IndexingInputGuard = new IndexingInputGuard()
+  ) {}
 
   public beginRun(projectId: string, sourceCount = 0) {
     const project = this.resolveProject(projectId);
@@ -72,6 +68,57 @@ export class IndexingService {
       return results;
     } catch (error: any) {
       this.finishRun(run.id, 'failed', 0, error?.message ?? 'Indexing failed');
+      throw error;
+    }
+  }
+
+  public rebuildIndex(projectId: string, sources: IndexSourceInput[]) {
+    const project = this.resolveProject(projectId);
+    const sanitizedSources = this.indexingInputGuard.sanitizeSources(project.rootPath, sources);
+    const run = this.indexingRunRepository.createRun(project.id, this.schemaMigrationService.ensureCurrentSchema(), sanitizedSources.length);
+
+    try {
+      const transaction = this.db.transaction(() => {
+        // Clear all entries and relations under project to perform a clean rebuild
+        this.db.prepare(`
+          DELETE FROM entries 
+          WHERE id IN (SELECT id FROM memory_entries WHERE project_id = ?)
+        `).run(project.id);
+
+        this.db.prepare(`
+          DELETE FROM entries_tags
+          WHERE entry_id NOT IN (SELECT id FROM entries)
+        `).run();
+
+        this.db.prepare(`DELETE FROM memory_entries WHERE project_id = ?`).run(project.id);
+        this.db.prepare(`DELETE FROM tags WHERE project_id = ?`).run(project.id);
+        this.db.prepare(`DELETE FROM relationships WHERE project_id = ?`).run(project.id);
+        this.db.prepare(`DELETE FROM source_documents WHERE project_id = ?`).run(project.id);
+
+        const processed = [];
+        for (const source of sanitizedSources) {
+          const doc = this.sourceDocumentRepository.upsert(project.id, source.path, source.checksum, Date.now());
+          const entry = this.memoryEntryService.createMemoryEntry({
+            projectId: project.id,
+            title: source.title,
+            content: source.content,
+            entryType: source.entryType,
+            tags: source.tags ?? [],
+            relationships: [],
+            sourceDocumentPath: source.path,
+            sourceChecksum: source.checksum
+          });
+          processed.push({ doc, entry });
+        }
+        return processed;
+      });
+
+      const results = transaction();
+
+      this.finishRun(run.id, 'success', results.length);
+      return results;
+    } catch (error: any) {
+      this.finishRun(run.id, 'failed', 0, error?.message ?? 'Index rebuild failed');
       throw error;
     }
   }
