@@ -1,8 +1,9 @@
 import Database from 'better-sqlite3';
 import { createId, now } from '../helpers';
 import { Relationship, RelationshipInput } from '../../../domain/entities/Relationship';
+import { IRelationshipRepository } from '../../../domain/repositories/interfaces';
 
-export class RelationshipRepository {
+export class RelationshipRepository implements IRelationshipRepository {
   constructor(private readonly db: Database.Database) {}
 
   public upsert(projectId: string, sourceEntryId: string, relationship: RelationshipInput): Relationship {

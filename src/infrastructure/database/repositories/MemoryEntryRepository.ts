@@ -2,13 +2,14 @@ import Database from 'better-sqlite3';
 import { createId, now } from '../helpers';
 import { MemoryEntry, MemoryEntryInput, MemoryEntrySchema } from '../../../domain/entities/MemoryEntry';
 import { Relationship } from '../../../domain/entities/Relationship';
+import { IMemoryEntryRepository } from '../../../domain/repositories/interfaces';
 
 export interface MemoryEntryRecord extends MemoryEntry {
   tags: string[];
   relationships: Relationship[];
 }
 
-export class MemoryEntryRepository {
+export class MemoryEntryRepository implements IMemoryEntryRepository {
   constructor(private readonly db: Database.Database) {}
 
   public create(input: MemoryEntryInput, sourceDocumentId: string | null = null): MemoryEntry {
@@ -85,6 +86,31 @@ export class MemoryEntryRepository {
 
     this.syncLegacyEntry(record);
     return record;
+  }
+
+  /**
+   * Overwrite an existing memory entry by primary key, or insert it if missing.
+   * Used for backup restoration (FR-004, Decision D7).
+   */
+  public restore(entry: MemoryEntry): void {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO memory_entries (
+        id, project_id, title, content, content_hash, entry_type, source_document_id, created_at, updated_at, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      entry.id,
+      entry.projectId,
+      entry.title,
+      entry.content,
+      entry.contentHash,
+      entry.entryType,
+      entry.sourceDocumentId ?? null,
+      entry.createdAt,
+      entry.updatedAt,
+      entry.deletedAt ?? null
+    );
+
+    this.syncLegacyEntry(entry);
   }
 
   public update(entryId: string, input: Partial<Pick<MemoryEntryInput, 'title' | 'content' | 'entryType' | 'sourceDocumentPath'>>): MemoryEntry | null {

@@ -3,6 +3,10 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
+import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
+import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
+import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 
 const execAsync = promisify(exec);
 
@@ -65,6 +69,31 @@ describe('CLI Integration', () => {
     }
   });
 
+  it('should export markdown backups from the CLI boundary', async () => {
+    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const db = createDatabaseConnection(dbFile);
+    try {
+      new SchemaMigrationService(db).ensureCurrentSchema();
+      const project = new ProjectRepository(db).upsertByRootPath(testWorkspace, 'test-workspace-cli');
+      new MemoryEntryService(db).createMemoryEntry({
+        projectId: project.id,
+        title: 'CLI export decision',
+        content: 'Export backups through the CLI command surface.',
+        entryType: 'decision',
+        tags: ['decision']
+      });
+    } finally {
+      db.close();
+    }
+
+    const { stdout, stderr } = await execAsync(`node ${cliScript} export markdown "${testWorkspace}"`);
+
+    expect(stderr).toBe('');
+    expect(stdout).toContain('markdown backups exported successfully to:');
+    expect(fs.existsSync(path.join(testWorkspace, '.flash-mem/exports/project-summary.md'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.flash-mem/exports/decisions.md'))).toBe(true);
+  });
+
   it('should output error JSON on stdout if collision occurs with --json option', async () => {
     // Create a regular file named .flash-mem
     fs.writeFileSync(path.join(testWorkspace, '.flash-mem'), 'colliding file');
@@ -80,4 +109,43 @@ describe('CLI Integration', () => {
       expect(result.error).toContain('A regular file named ".flash-mem" already exists');
     }
   });
+  it('should refuse to rebuild index without --yes confirmation', async () => {
+    // Initialize first
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+
+    try {
+      await execAsync(`node ${cliScript} rebuild-index "${testWorkspace}"`);
+      expect(true).toBe(false); // shouldn't reach here
+    } catch (err: any) {
+      expect(err.code).toBe(1);
+      expect(err.stderr).toContain('Error: Rebuilding the index is a destructive operation that clears the database. Run with --yes to confirm.');
+    }
+  });
+
+  it('should successfully rebuild index with --yes confirmation', async () => {
+    // Initialize
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+
+    // Create a markdown file to index
+    const mdPath = path.join(testWorkspace, 'docs', 'decision-sqlite.md');
+    fs.ensureDirSync(path.dirname(mdPath));
+    fs.writeFileSync(mdPath, '# Decision: SQLite\nWe use SQLite for local memory.');
+
+    // Build/rebuild index
+    const { stdout, stderr } = await execAsync(`node ${cliScript} rebuild-index "${testWorkspace}" --yes`);
+    expect(stderr).toBe('');
+    expect(stdout).toContain('Index rebuilt successfully!');
+
+    // Verify it was indexed
+    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const db = createDatabaseConnection(dbFile);
+    try {
+      const row = db.prepare(`SELECT * FROM memory_entries WHERE title = 'Decision: SQLite'`).get() as any;
+      expect(row).toBeDefined();
+      expect(row.content).toContain('We use SQLite for local memory.');
+    } finally {
+      db.close();
+    }
+  });
 });
+

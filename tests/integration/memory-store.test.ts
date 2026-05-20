@@ -4,6 +4,8 @@ import * as path from 'path';
 import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
+import { IndexingRunRepository } from '../../src/infrastructure/database/repositories/IndexingRunRepository';
 import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { MemorySearchService } from '../../src/application/services/MemorySearchService';
 import { IndexingService } from '../../src/application/services/IndexingService';
@@ -29,7 +31,14 @@ describe('Memory Store Integration', () => {
     const project = new ProjectRepository(db).upsertByRootPath(path.dirname(testDbFile), 'memory-store-workspace');
     const memoryEntries = new MemoryEntryService(db);
     const search = new MemorySearchService(db);
-    const indexing = new IndexingService(db);
+    const indexing = new IndexingService(
+      db,
+      new ProjectRepository(db),
+      new SourceDocumentRepository(db),
+      new IndexingRunRepository(db),
+      memoryEntries,
+      new SchemaMigrationService(db)
+    );
 
     const created = memoryEntries.createMemoryEntry({
       projectId: project.id,
