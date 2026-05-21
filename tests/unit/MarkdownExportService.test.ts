@@ -10,6 +10,7 @@ import { RelationshipRepository } from '../../src/infrastructure/database/reposi
 import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
 import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { MarkdownExportService } from '../../src/application/services/MarkdownExportService';
+import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 
 describe('MarkdownExportService', () => {
   let db: any;
@@ -30,13 +31,22 @@ describe('MarkdownExportService', () => {
   });
 
   it('exports markdown backups without deleting unrelated files', async () => {
-    const project = new ProjectRepository(db).upsertByRootPath(testWorkspace, 'markdown-export-workspace');
-    const memory = new MemoryEntryService(db);
+    const projectRepo = new ProjectRepository(db);
+    const project = projectRepo.upsertByRootPath(testWorkspace, 'markdown-export-workspace');
+    const memory = new MemoryEntryService(
+      projectRepo,
+      new MemoryEntryRepository(db),
+      new TagRepository(db),
+      new RelationshipRepository(db),
+      new SourceDocumentRepository(db),
+      new SqliteTransactionRunner(db)
+    );
     memory.createMemoryEntry({
       projectId: project.id,
       title: 'Use SQLite',
       content: 'api_key=SECRET_VALUE',
-      entryType: 'decision',
+      category: 'decision',
+      source: 'test',
       tags: ['decision']
     });
 

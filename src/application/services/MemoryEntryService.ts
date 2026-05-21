@@ -1,42 +1,61 @@
-import Database from 'better-sqlite3';
 import { createHash } from 'node:crypto';
+import * as path from 'path';
 import { MemoryEntryInput } from '../../domain/entities/MemoryEntry';
 import { Project } from '../../domain/entities/Project';
 import { RelationshipInput } from '../../domain/entities/Relationship';
-import { MemoryEntryRepository } from '../../infrastructure/database/repositories/MemoryEntryRepository';
-import { ProjectRepository } from '../../infrastructure/database/repositories/ProjectRepository';
-import { RelationshipRepository } from '../../infrastructure/database/repositories/RelationshipRepository';
-import { SourceDocumentRepository } from '../../infrastructure/database/repositories/SourceDocumentRepository';
-import { TagRepository } from '../../infrastructure/database/repositories/TagRepository';
+import {
+  IProjectRepository,
+  IMemoryEntryRepository,
+  ITagRepository,
+  IRelationshipRepository,
+  ISourceDocumentRepository,
+  ITransactionRunner
+} from '../../domain/repositories/interfaces';
 import { createId, now } from '../../infrastructure/database/helpers';
 import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
+import { SecretScanner } from '../../infrastructure/safety/SecretScanner';
+import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
 
 export class MemoryEntryService {
-  private readonly projectRepository: ProjectRepository;
-  private readonly memoryEntryRepository: MemoryEntryRepository;
-  private readonly tagRepository: TagRepository;
-  private readonly relationshipRepository: RelationshipRepository;
-  private readonly sourceDocumentRepository: SourceDocumentRepository;
   private readonly indexingInputGuard: IndexingInputGuard;
 
-  constructor(private readonly db: Database.Database) {
-    this.projectRepository = new ProjectRepository(db);
-    this.memoryEntryRepository = new MemoryEntryRepository(db);
-    this.tagRepository = new TagRepository(db);
-    this.relationshipRepository = new RelationshipRepository(db);
-    this.sourceDocumentRepository = new SourceDocumentRepository(db);
+  constructor(
+    private readonly projectRepository: IProjectRepository,
+    private readonly memoryEntryRepository: IMemoryEntryRepository,
+    private readonly tagRepository: ITagRepository,
+    private readonly relationshipRepository: IRelationshipRepository,
+    private readonly sourceDocumentRepository: ISourceDocumentRepository,
+    private readonly transactionRunner: ITransactionRunner
+  ) {
     this.indexingInputGuard = new IndexingInputGuard();
   }
 
-  public createMemoryEntry(input: MemoryEntryInput & { rootPath?: string; projectName?: string }) {
+  public createMemoryEntry(input: MemoryEntryInput & { projectId?: string; rootPath?: string; projectName?: string }) {
     const project = this.resolveProject(input);
-    const run = this.db.transaction(() => {
+
+    if (input.relatedFiles) {
+      const resolvedRoot = PathSanitizer.resolveRoot(project.rootPath);
+      for (const file of input.relatedFiles) {
+        const absoluteFilePath = path.resolve(resolvedRoot, file);
+        if (!PathSanitizer.isWithinRoot(resolvedRoot, absoluteFilePath)) {
+          throw new Error(`Directory traversal detected in related file path: "${file}"`);
+        }
+      }
+    }
+
+    const redactedTitle = SecretScanner.redact(input.title);
+    const redactedContent = SecretScanner.redact(input.content);
+
+    return this.transactionRunner.run(() => {
       const sourceDocumentId = this.resolveSourceDocumentId(project, input);
       const entry = this.memoryEntryRepository.create({
         projectId: project.id,
-        title: input.title,
-        content: input.content,
-        entryType: input.entryType,
+        title: redactedTitle,
+        content: redactedContent,
+        category: input.category,
+        source: input.source,
+        confidence: input.confidence,
+        relatedFiles: input.relatedFiles,
         tags: input.tags ?? [],
         sourceDocumentPath: input.sourceDocumentPath,
         sourceChecksum: input.sourceChecksum,
@@ -50,21 +69,38 @@ export class MemoryEntryService {
 
       return this.memoryEntryRepository.findById(entry.id);
     });
-
-    return run();
   }
 
   public updateMemoryEntry(entryId: string, input: Partial<MemoryEntryInput> & { tags?: string[]; relationships?: RelationshipInput[] }) {
-    const run = this.db.transaction(() => {
-      const existing = this.memoryEntryRepository.findById(entryId);
-      if (!existing) {
-        return null;
-      }
+    const existing = this.memoryEntryRepository.findById(entryId);
+    if (!existing) {
+      return null;
+    }
 
+    if (input.relatedFiles) {
+      const project = this.projectRepository.findById(existing.projectId);
+      if (project) {
+        const resolvedRoot = PathSanitizer.resolveRoot(project.rootPath);
+        for (const file of input.relatedFiles) {
+          const absoluteFilePath = path.resolve(resolvedRoot, file);
+          if (!PathSanitizer.isWithinRoot(resolvedRoot, absoluteFilePath)) {
+            throw new Error(`Directory traversal detected in related file path: "${file}"`);
+          }
+        }
+      }
+    }
+
+    const redactedTitle = input.title !== undefined ? SecretScanner.redact(input.title) : undefined;
+    const redactedContent = input.content !== undefined ? SecretScanner.redact(input.content) : undefined;
+
+    return this.transactionRunner.run(() => {
       const updated = this.memoryEntryRepository.update(entryId, {
-        title: input.title,
-        content: input.content,
-        entryType: input.entryType
+        title: redactedTitle,
+        content: redactedContent,
+        category: input.category,
+        source: input.source,
+        confidence: input.confidence,
+        relatedFiles: input.relatedFiles
       });
 
       if (!updated) {
@@ -83,13 +119,10 @@ export class MemoryEntryService {
 
       return this.memoryEntryRepository.findById(entryId);
     });
-
-    return run();
   }
 
   public deleteMemoryEntry(entryId: string): boolean {
-    const run = this.db.transaction(() => this.memoryEntryRepository.softDelete(entryId));
-    return run();
+    return this.transactionRunner.run(() => this.memoryEntryRepository.softDelete(entryId));
   }
 
   public createProject(rootPath: string, projectName: string) {

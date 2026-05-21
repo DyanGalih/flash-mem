@@ -4,8 +4,12 @@ import * as path from 'path';
 import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
+import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
+import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
 import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
 import { IndexingRunRepository } from '../../src/infrastructure/database/repositories/IndexingRunRepository';
+import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { MemorySearchService } from '../../src/application/services/MemorySearchService';
 import { IndexingService } from '../../src/application/services/IndexingService';
@@ -28,23 +32,40 @@ describe('Memory Store Integration', () => {
   });
 
   it('supports create, search, and indexing flows end to end', () => {
-    const project = new ProjectRepository(db).upsertByRootPath(path.dirname(testDbFile), 'memory-store-workspace');
-    const memoryEntries = new MemoryEntryService(db);
-    const search = new MemorySearchService(db);
+    const projectRepo = new ProjectRepository(db);
+    const memoryEntryRepo = new MemoryEntryRepository(db);
+    const tagRepo = new TagRepository(db);
+    const relationshipRepo = new RelationshipRepository(db);
+    const sourceDocumentRepo = new SourceDocumentRepository(db);
+    const indexingRunRepo = new IndexingRunRepository(db);
+    const transactionRunner = new SqliteTransactionRunner(db);
+    const schemaMigrationService = new SchemaMigrationService(db);
+
+    const project = projectRepo.upsertByRootPath(path.dirname(testDbFile), 'memory-store-workspace');
+    const memoryEntries = new MemoryEntryService(
+      projectRepo,
+      memoryEntryRepo,
+      tagRepo,
+      relationshipRepo,
+      sourceDocumentRepo,
+      transactionRunner
+    );
+    const search = new MemorySearchService(memoryEntryRepo);
     const indexing = new IndexingService(
-      db,
-      new ProjectRepository(db),
-      new SourceDocumentRepository(db),
-      new IndexingRunRepository(db),
+      projectRepo,
+      sourceDocumentRepo,
+      indexingRunRepo,
       memoryEntries,
-      new SchemaMigrationService(db)
+      schemaMigrationService,
+      transactionRunner
     );
 
     const created = memoryEntries.createMemoryEntry({
       projectId: project.id,
       title: 'Store memory',
       content: 'SQLite-backed memory store',
-      entryType: 'note',
+      category: 'note',
+      source: 'test',
       tags: ['sqlite', 'memory']
     });
 
@@ -55,7 +76,7 @@ describe('Memory Store Integration', () => {
       checksum: 'checksum-1',
       title: 'Overview',
       content: 'Store engineering memory',
-      entryType: 'note',
+      category: 'note',
       tags: ['docs']
     }]);
 

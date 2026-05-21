@@ -8,7 +8,10 @@ export interface IndexingSourceInput {
   checksum: string;
   title: string;
   content: string;
-  entryType: string;
+  category: string;
+  source?: string;
+  confidence?: number;
+  relatedFiles?: string[];
   tags?: string[];
 }
 

@@ -10,9 +10,12 @@ import { RelationshipRepository } from '../../src/infrastructure/database/reposi
 import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
 import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { MarkdownExportService } from '../../src/application/services/MarkdownExportService';
+import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 
 describe('Markdown export integration', () => {
   let db: any;
+  let memory: MemoryEntryService;
+  let projectRepo: ProjectRepository;
   const testWorkspace = path.resolve(__dirname, 'markdown-export-integration-workspace');
   const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
 
@@ -20,6 +23,16 @@ describe('Markdown export integration', () => {
     fs.removeSync(testWorkspace);
     db = createDatabaseConnection(dbFile);
     new SchemaMigrationService(db).ensureCurrentSchema();
+
+    projectRepo = new ProjectRepository(db);
+    memory = new MemoryEntryService(
+      projectRepo,
+      new MemoryEntryRepository(db),
+      new TagRepository(db),
+      new RelationshipRepository(db),
+      new SourceDocumentRepository(db),
+      new SqliteTransactionRunner(db)
+    );
   });
 
   afterEach(() => {
@@ -30,21 +43,22 @@ describe('Markdown export integration', () => {
   });
 
   it('exports the expected markdown files with readable content', async () => {
-    const project = new ProjectRepository(db).upsertByRootPath(testWorkspace, 'markdown-export-integration-workspace');
-    const memory = new MemoryEntryService(db);
+    const project = projectRepo.upsertByRootPath(testWorkspace, 'markdown-export-integration-workspace');
 
     memory.createMemoryEntry({
       projectId: project.id,
       title: 'Decision: use SQLite',
       content: 'SQLite keeps the memory local and fast.',
-      entryType: 'decision',
+      category: 'decision',
+      source: 'test',
       tags: ['decision', 'sqlite']
     });
     memory.createMemoryEntry({
       projectId: project.id,
       title: 'Security note',
       content: 'Private key: -----BEGIN PRIVATE KEY-----abc-----END PRIVATE KEY-----',
-      entryType: 'security-note',
+      category: 'security-note',
+      source: 'test',
       tags: ['security']
     });
 
@@ -70,15 +84,15 @@ describe('Markdown export integration', () => {
   });
 
   it('exports a representative workspace in under 2 minutes', async () => {
-    const project = new ProjectRepository(db).upsertByRootPath(testWorkspace, 'markdown-export-integration-workspace');
-    const memory = new MemoryEntryService(db);
+    const project = projectRepo.upsertByRootPath(testWorkspace, 'markdown-export-integration-workspace');
 
     for (let index = 0; index < 120; index += 1) {
       memory.createMemoryEntry({
         projectId: project.id,
         title: `Decision ${index}`,
         content: `Remember item ${index}`,
-        entryType: index % 2 === 0 ? 'decision' : 'pattern',
+        category: index % 2 === 0 ? 'decision' : 'pattern',
+        source: 'test',
         tags: index % 2 === 0 ? ['decision'] : ['pattern']
       });
     }

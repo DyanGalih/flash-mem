@@ -8,7 +8,8 @@
     "build": "tsc",
     "test": "vitest run",
     "test:watch": "vitest",
-    "start": "node dist/infrastructure/cli/index.js"
+    "start": "node dist/infrastructure/cli/index.js",
+    "mcp": "node dist/infrastructure/cli/index.js mcp"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "file:./vendor/modelcontextprotocol-sdk",

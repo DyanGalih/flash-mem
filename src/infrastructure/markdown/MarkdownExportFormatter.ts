@@ -6,7 +6,7 @@ export interface ExportedMemoryEntry {
   id: string;
   title: string;
   content: string;
-  entryType: string;
+  category: string;
   tags: string[];
   updatedAt: number;
   createdAt: number;
@@ -61,7 +61,7 @@ export class MarkdownExportFormatter {
         '',
         `### ${entry.title}`,
         `- ID: ${entry.id}`,
-        `- Type: ${entry.entryType}`,
+        `- Category: ${entry.category}`,
         `- Tags: ${this.formatTags(entry.tags)}`,
         `- Updated: ${new Date(entry.updatedAt).toISOString()}`,
         `- Source: ${entry.sourceDocumentPath ? `\`${entry.sourceDocumentPath}\`` : 'not recorded'}`,
@@ -99,7 +99,7 @@ export class MarkdownExportFormatter {
       lines.push(
         `## ${entry.title}`,
         `- ID: ${entry.id}`,
-        `- Type: ${entry.entryType}`,
+        `- Category: ${entry.category}`,
         `- Tags: ${this.formatTags(entry.tags)}`,
         `- Updated: ${new Date(entry.updatedAt).toISOString()}`,
         `- Source: ${entry.sourceDocumentPath ? `\`${entry.sourceDocumentPath}\`` : 'not recorded'}`,

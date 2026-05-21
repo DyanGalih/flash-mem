@@ -6,6 +6,11 @@ import { promisify } from 'util';
 import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
+import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
+import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
+import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
+import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 
 const execAsync = promisify(exec);
@@ -74,12 +79,21 @@ describe('CLI Integration', () => {
     const db = createDatabaseConnection(dbFile);
     try {
       new SchemaMigrationService(db).ensureCurrentSchema();
-      const project = new ProjectRepository(db).upsertByRootPath(testWorkspace, 'test-workspace-cli');
-      new MemoryEntryService(db).createMemoryEntry({
+      const projectRepo = new ProjectRepository(db);
+      const project = projectRepo.upsertByRootPath(testWorkspace, 'test-workspace-cli');
+      new MemoryEntryService(
+        projectRepo,
+        new MemoryEntryRepository(db),
+        new TagRepository(db),
+        new RelationshipRepository(db),
+        new SourceDocumentRepository(db),
+        new SqliteTransactionRunner(db)
+      ).createMemoryEntry({
         projectId: project.id,
         title: 'CLI export decision',
         content: 'Export backups through the CLI command surface.',
-        entryType: 'decision',
+        category: 'decision',
+        source: 'test',
         tags: ['decision']
       });
     } finally {

@@ -10,7 +10,7 @@ export interface ParsedMemoryEntry {
   id: string;
   title: string;
   content: string;
-  entryType: string;
+  category: string;
   tags: string[];
   updatedAt: number;
   sourceDocumentPath: string | null;
@@ -230,7 +230,7 @@ export class MarkdownBackupParser {
     }
 
     let id: string | null = null;
-    let entryType: string | null = null;
+    let category: string | null = null;
     let tags: string[] = [];
     let updatedAt: number | null = null;
     let sourceDocumentPath: string | null = null;
@@ -273,8 +273,9 @@ export class MarkdownBackupParser {
 
         if (meta.startsWith('ID: ')) {
           id = meta.slice(4).trim();
-        } else if (meta.startsWith('Type: ')) {
-          entryType = meta.slice(6).trim();
+        } else if (meta.startsWith('Type: ') || meta.startsWith('Category: ')) {
+          const isType = meta.startsWith('Type: ');
+          category = meta.slice(isType ? 6 : 10).trim();
         } else if (meta.startsWith('Tags: ')) {
           tags = this.parseTags(meta.slice(6).trim());
         } else if (meta.startsWith('Updated: ')) {
@@ -340,7 +341,7 @@ export class MarkdownBackupParser {
       id,
       title: safeTitle,
       content: safeContent,
-      entryType: entryType ?? 'note',
+      category: category ?? 'note',
       tags,
       updatedAt: updatedAt ?? Date.now(),
       sourceDocumentPath,

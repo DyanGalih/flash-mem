@@ -100,7 +100,7 @@ describe('MarkdownBackupParser', () => {
       const entry = result.entries[0];
       expect(entry.id).toBe('abc-123');
       expect(entry.title).toBe('Use SQLite');
-      expect(entry.entryType).toBe('decision');
+      expect(entry.category).toBe('decision');
       expect(entry.tags).toEqual(['sqlite', 'arch']);
       expect(entry.content).toBe('We chose SQLite for local storage.');
       expect(entry.updatedAt).toBe(Date.parse('2026-05-20T12:00:00.000Z'));

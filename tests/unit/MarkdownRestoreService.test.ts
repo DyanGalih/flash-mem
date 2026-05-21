@@ -12,6 +12,8 @@ import { ProjectRepository } from '../../src/infrastructure/database/repositorie
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
 import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 
+import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
+
 // Helper to build a minimal section-file markdown string
 function buildSectionMarkdown(entries: Array<{
   id: string;
@@ -79,13 +81,13 @@ describe('MarkdownRestoreService', () => {
     migrationService.ensureCurrentSchema();
 
     service = new MarkdownRestoreService(
-      db,
       new ProjectRepository(db),
       new MemoryEntryRepository(db),
       new TagRepository(db),
       new RelationshipRepository(db),
       new SourceDocumentRepository(db),
-      migrationService
+      migrationService,
+      new SqliteTransactionRunner(db)
     );
   });
 
@@ -115,7 +117,7 @@ describe('MarkdownRestoreService', () => {
       .get() as any;
     expect(row).toBeDefined();
     expect(row.title).toBe('Use TypeScript');
-    expect(row.entry_type).toBe('decision');
+    expect(row.category).toBe('decision');
   });
 
   it('restores multiple entries from multiple backup files', () => {

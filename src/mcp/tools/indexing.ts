@@ -8,7 +8,7 @@ export const indexingInputSchema = z.object({
     checksum: z.string().min(1),
     title: z.string().min(1),
     content: z.string().min(1),
-    entryType: z.string().min(1),
+    category: z.string().min(1),
     tags: z.array(z.string().min(1)).optional()
   })).default([])
 });

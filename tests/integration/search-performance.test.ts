@@ -6,6 +6,7 @@ import { createDatabaseConnection } from '../../src/infrastructure/database/conn
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
 import { MemorySearchService } from '../../src/application/services/MemorySearchService';
+import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
 
 describe('Search Performance', () => {
   let db: any;
@@ -28,12 +29,12 @@ describe('Search Performance', () => {
     const project = new ProjectRepository(db).upsertByRootPath(path.dirname(testDbFile), 'search-performance-workspace');
     const memoryEntries = db.prepare(`
       INSERT INTO memory_entries (
-        id, project_id, title, content, content_hash, entry_type, source_document_id, created_at, updated_at, deleted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, title, content, content_hash, category, source, confidence, related_files, source_document_id, created_at, updated_at, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const tags = db.prepare(`INSERT INTO tags (id, project_id, name, created_at) VALUES (?, ?, ?, ?)`);
     const entryTags = db.prepare(`INSERT INTO memory_entry_tags (entry_id, tag_id) VALUES (?, ?)`);
-
+ 
     const seed = db.transaction(() => {
       const baseTime = Date.now();
       for (let i = 0; i < 10000; i++) {
@@ -48,6 +49,9 @@ describe('Search Performance', () => {
           content,
           `${title}:${content}`,
           'note',
+          'file',
+          null,
+          null,
           null,
           baseTime,
           baseTime,
@@ -60,7 +64,7 @@ describe('Search Performance', () => {
 
     seed();
 
-    const search = new MemorySearchService(db);
+    const search = new MemorySearchService(new MemoryEntryRepository(db));
     const started = performance.now();
     const results = search.search(project.id, 'needle');
     const duration = performance.now() - started;

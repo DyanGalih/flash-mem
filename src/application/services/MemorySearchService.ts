@@ -1,14 +1,15 @@
-import Database from 'better-sqlite3';
-import { MemoryEntryRepository, MemoryEntryRecord } from '../../infrastructure/database/repositories/MemoryEntryRepository';
+import { IMemoryEntryRepository } from '../../domain/repositories/interfaces';
+import { MemoryEntry } from '../../domain/entities/MemoryEntry';
+import { Relationship } from '../../domain/entities/Relationship';
 
 export class MemorySearchService {
-  private readonly entryRepository: MemoryEntryRepository;
+  constructor(private readonly entryRepository: IMemoryEntryRepository) {}
 
-  constructor(private readonly db: Database.Database) {
-    this.entryRepository = new MemoryEntryRepository(db);
-  }
-
-  public search(projectId: string, query: string, limit = 20): Array<MemoryEntryRecord & { score: number }> {
+  public search(
+    projectId: string,
+    query: string,
+    limit = 20
+  ): Array<MemoryEntry & { tags: string[]; relationships: Relationship[]; score: number }> {
     const trimmed = query.trim();
     if (!trimmed) {
       return [];

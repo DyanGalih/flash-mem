@@ -1,8 +1,8 @@
-import Database from 'better-sqlite3';
 import {
   IProjectRepository,
   ISourceDocumentRepository,
-  IIndexingRunRepository
+  IIndexingRunRepository,
+  ITransactionRunner
 } from '../../domain/repositories/interfaces';
 import { MemoryEntryService } from './MemoryEntryService';
 import { SchemaMigrationService } from './SchemaMigrationService';
@@ -13,18 +13,21 @@ export interface IndexSourceInput {
   checksum: string;
   title: string;
   content: string;
-  entryType: string;
+  category: string;
+  source?: string;
+  confidence?: number;
+  relatedFiles?: string[];
   tags?: string[];
 }
 
 export class IndexingService {
   constructor(
-    private readonly db: Database.Database,
     private readonly projectRepository: IProjectRepository,
     private readonly sourceDocumentRepository: ISourceDocumentRepository,
     private readonly indexingRunRepository: IIndexingRunRepository,
     private readonly memoryEntryService: MemoryEntryService,
     private readonly schemaMigrationService: SchemaMigrationService,
+    private readonly transactionRunner: ITransactionRunner,
     private readonly indexingInputGuard: IndexingInputGuard = new IndexingInputGuard()
   ) {}
 
@@ -43,7 +46,7 @@ export class IndexingService {
     const run = this.indexingRunRepository.createRun(project.id, this.schemaMigrationService.ensureCurrentSchema(), sanitizedSources.length);
 
     try {
-      const transaction = this.db.transaction(() => {
+      const results = this.transactionRunner.run(() => {
         const processed = [];
         for (const source of sanitizedSources) {
           const doc = this.sourceDocumentRepository.upsert(project.id, source.path, source.checksum, Date.now());
@@ -51,7 +54,10 @@ export class IndexingService {
             projectId: project.id,
             title: source.title,
             content: source.content,
-            entryType: source.entryType,
+            category: source.category,
+            source: source.source ?? 'file',
+            confidence: source.confidence,
+            relatedFiles: source.relatedFiles,
             tags: source.tags ?? [],
             relationships: [],
             sourceDocumentPath: source.path,
@@ -61,8 +67,6 @@ export class IndexingService {
         }
         return processed;
       });
-
-      const results = transaction();
 
       this.finishRun(run.id, 'success', results.length);
       return results;
@@ -78,22 +82,9 @@ export class IndexingService {
     const run = this.indexingRunRepository.createRun(project.id, this.schemaMigrationService.ensureCurrentSchema(), sanitizedSources.length);
 
     try {
-      const transaction = this.db.transaction(() => {
+      const results = this.transactionRunner.run(() => {
         // Clear all entries and relations under project to perform a clean rebuild
-        this.db.prepare(`
-          DELETE FROM entries 
-          WHERE id IN (SELECT id FROM memory_entries WHERE project_id = ?)
-        `).run(project.id);
-
-        this.db.prepare(`
-          DELETE FROM entries_tags
-          WHERE entry_id NOT IN (SELECT id FROM entries)
-        `).run();
-
-        this.db.prepare(`DELETE FROM memory_entries WHERE project_id = ?`).run(project.id);
-        this.db.prepare(`DELETE FROM tags WHERE project_id = ?`).run(project.id);
-        this.db.prepare(`DELETE FROM relationships WHERE project_id = ?`).run(project.id);
-        this.db.prepare(`DELETE FROM source_documents WHERE project_id = ?`).run(project.id);
+        this.projectRepository.clearProjectData(project.id);
 
         const processed = [];
         for (const source of sanitizedSources) {
@@ -102,7 +93,10 @@ export class IndexingService {
             projectId: project.id,
             title: source.title,
             content: source.content,
-            entryType: source.entryType,
+            category: source.category,
+            source: source.source ?? 'file',
+            confidence: source.confidence,
+            relatedFiles: source.relatedFiles,
             tags: source.tags ?? [],
             relationships: [],
             sourceDocumentPath: source.path,
@@ -112,8 +106,6 @@ export class IndexingService {
         }
         return processed;
       });
-
-      const results = transaction();
 
       this.finishRun(run.id, 'success', results.length);
       return results;

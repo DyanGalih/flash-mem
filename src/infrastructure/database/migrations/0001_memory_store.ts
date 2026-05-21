@@ -28,7 +28,10 @@ export function initializeMemoryStoreSchema(db: Database.Database): void {
         title TEXT NOT NULL,
         content TEXT NOT NULL,
         content_hash TEXT NOT NULL,
-        entry_type TEXT NOT NULL,
+        category TEXT NOT NULL,
+        source TEXT NOT NULL,
+        confidence INTEGER,
+        related_files TEXT,
         source_document_id TEXT,
         created_at INTEGER NOT NULL,
         updated_at INTEGER NOT NULL,
@@ -37,6 +40,23 @@ export function initializeMemoryStoreSchema(db: Database.Database): void {
         FOREIGN KEY (source_document_id) REFERENCES source_documents(id) ON DELETE SET NULL
       )
     `).run();
+
+    // Dynamic runtime migration to handle upgrading existing databases from older runs
+    const columns = db.prepare("PRAGMA table_info(memory_entries)").all() as Array<{ name: string }>;
+    const columnNames = columns.map(c => c.name);
+
+    if (columnNames.includes('entry_type') && !columnNames.includes('category')) {
+      db.prepare("ALTER TABLE memory_entries RENAME COLUMN entry_type TO category").run();
+    }
+    if (!columnNames.includes('source')) {
+      db.prepare("ALTER TABLE memory_entries ADD COLUMN source TEXT NOT NULL DEFAULT 'unknown'").run();
+    }
+    if (!columnNames.includes('confidence')) {
+      db.prepare("ALTER TABLE memory_entries ADD COLUMN confidence INTEGER").run();
+    }
+    if (!columnNames.includes('related_files')) {
+      db.prepare("ALTER TABLE memory_entries ADD COLUMN related_files TEXT").run();
+    }
 
     db.prepare(`
       CREATE TABLE IF NOT EXISTS tags (
@@ -144,8 +164,9 @@ export function initializeMemoryStoreSchema(db: Database.Database): void {
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_source_documents_project_path ON source_documents(project_id, path)`).run();
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_indexing_runs_project_started ON indexing_runs(project_id, started_at)`).run();
 
+    db.prepare(`DROP VIEW IF EXISTS memory_entries_view`).run();
     db.prepare(`
-      CREATE VIEW IF NOT EXISTS memory_entries_view AS
+      CREATE VIEW memory_entries_view AS
       SELECT me.*
       FROM memory_entries me
     `).run();

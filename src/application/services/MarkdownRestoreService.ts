@@ -1,13 +1,15 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import Database from 'better-sqlite3';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
 import { MarkdownBackupParser, ParsedMemoryEntry } from '../../infrastructure/markdown/MarkdownBackupParser';
-import { MemoryEntryRepository } from '../../infrastructure/database/repositories/MemoryEntryRepository';
-import { TagRepository } from '../../infrastructure/database/repositories/TagRepository';
-import { RelationshipRepository } from '../../infrastructure/database/repositories/RelationshipRepository';
-import { SourceDocumentRepository } from '../../infrastructure/database/repositories/SourceDocumentRepository';
-import { ProjectRepository } from '../../infrastructure/database/repositories/ProjectRepository';
+import {
+  IProjectRepository,
+  IMemoryEntryRepository,
+  ITagRepository,
+  IRelationshipRepository,
+  ISourceDocumentRepository,
+  ITransactionRunner
+} from '../../domain/repositories/interfaces';
 import { SchemaMigrationService } from './SchemaMigrationService';
 import { MemoryEntry, MemoryEntrySchema } from '../../domain/entities/MemoryEntry';
 
@@ -39,13 +41,13 @@ export class MarkdownRestoreService {
   private readonly parser = new MarkdownBackupParser();
 
   constructor(
-    private readonly db: Database.Database,
-    private readonly projectRepo: ProjectRepository,
-    private readonly entryRepo: MemoryEntryRepository,
-    private readonly tagRepo: TagRepository,
-    private readonly relationshipRepo: RelationshipRepository,
-    private readonly sourceDocRepo: SourceDocumentRepository,
-    private readonly migrationService: SchemaMigrationService
+    private readonly projectRepo: IProjectRepository,
+    private readonly entryRepo: IMemoryEntryRepository,
+    private readonly tagRepo: ITagRepository,
+    private readonly relationshipRepo: IRelationshipRepository,
+    private readonly sourceDocRepo: ISourceDocumentRepository,
+    private readonly migrationService: SchemaMigrationService,
+    private readonly transactionRunner: ITransactionRunner
   ) {}
 
   /**
@@ -67,10 +69,7 @@ export class MarkdownRestoreService {
     this.migrationService.ensureCurrentSchema();
 
     // --- 2. Scan .md files ---
-    const mdFiles = fs
-      .readdirSync(resolvedBackupDir)
-      .filter((f) => f.endsWith('.md'))
-      .map((f) => path.join(resolvedBackupDir, f));
+    const mdFiles = this.scanBackupDirectory(resolvedBackupDir);
 
     const result: RestoreResult = {
       restoredEntries: 0,
@@ -85,10 +84,56 @@ export class MarkdownRestoreService {
     }
 
     // --- 3. Parse all files; deduplicate entries by ID ---
-    // Map<entryId, ParsedMemoryEntry> — last parsed wins within the same file set
     const entriesById = new Map<string, ParsedMemoryEntry>();
     const projectNameFromBackup = this.detectProjectName(resolvedBackupDir, resolvedRoot);
 
+    this.parseAndDeduplicate(mdFiles, entriesById, result);
+
+    if (entriesById.size === 0) {
+      result.warnings.push(`No valid memory entries found in backup directory.`);
+      return result;
+    }
+
+    // --- 4. Wrap all database writes in a single transaction (FR-005) ---
+    this.transactionRunner.run(() => {
+      // Upsert project record
+      const project = this.projectRepo.upsertByRootPath(
+        resolvedRoot,
+        projectNameFromBackup ?? path.basename(resolvedRoot)
+      );
+
+      // Restore entries and their tags
+      this.restoreEntries(entriesById, project, result);
+
+      // Restore relationships — validate both endpoints exist (FR-008)
+      this.restoreRelationships(entriesById, project.id, result);
+    });
+
+    return result;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Private helpers
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Scan backup directory for markdown files.
+   */
+  private scanBackupDirectory(resolvedBackupDir: string): string[] {
+    return fs
+      .readdirSync(resolvedBackupDir)
+      .filter((f) => f.endsWith('.md'))
+      .map((f) => path.join(resolvedBackupDir, f));
+  }
+
+  /**
+   * Parse backup markdown files and deduplicate them by entry ID.
+   */
+  private parseAndDeduplicate(
+    mdFiles: string[],
+    entriesById: Map<string, ParsedMemoryEntry>,
+    result: RestoreResult
+  ): void {
     for (const filePath of mdFiles) {
       const filename = path.basename(filePath);
       let content: string;
@@ -125,93 +170,89 @@ export class MarkdownRestoreService {
         }
       }
     }
-
-    if (entriesById.size === 0) {
-      result.warnings.push(`No valid memory entries found in backup directory.`);
-      return result;
-    }
-
-    // --- 4. Wrap all database writes in a single transaction (FR-005) ---
-    const doRestore = this.db.transaction(() => {
-      // Upsert project record
-      const project = this.projectRepo.upsertByRootPath(
-        resolvedRoot,
-        projectNameFromBackup ?? path.basename(resolvedRoot)
-      );
-
-      // Restore entries and their tags
-      for (const [, parsed] of entriesById) {
-        // Upsert source document if a path was recorded
-        let sourceDocumentId: string | null = null;
-        if (parsed.sourceDocumentPath) {
-          try {
-            const sourceDoc = this.sourceDocRepo.upsert(
-              project.id,
-              parsed.sourceDocumentPath,
-              '', // No checksum available from backup
-              parsed.updatedAt
-            );
-            sourceDocumentId = sourceDoc.id;
-          } catch {
-            // Non-fatal — continue without source document link
-          }
-        }
-
-        const contentHash = Buffer.from(
-          `${parsed.title}\n${parsed.content}\n${parsed.entryType}`
-        ).toString('base64');
-
-        const entry: MemoryEntry = MemoryEntrySchema.parse({
-          id: parsed.id,
-          projectId: project.id,
-          title: parsed.title,
-          content: parsed.content,
-          contentHash,
-          entryType: parsed.entryType,
-          sourceDocumentId,
-          createdAt: parsed.updatedAt,
-          updatedAt: parsed.updatedAt,
-          deletedAt: null
-        });
-
-        this.entryRepo.restore(entry);
-        this.tagRepo.replaceEntryTags(entry.id, parsed.tags);
-
-        result.restoredEntries++;
-      }
-
-      // Restore relationships — validate both endpoints exist (FR-008)
-      for (const [, parsed] of entriesById) {
-        for (const rel of parsed.relationships) {
-          const sourceExists = this.entryRepo.findById(parsed.id) !== null;
-          const targetExists = this.entryRepo.findById(rel.targetEntryId) !== null;
-
-          if (!sourceExists || !targetExists) {
-            const msg = `Skipping relationship "${rel.relationshipType}" from "${parsed.id}" to "${rel.targetEntryId}" — one or both entries not found.`;
-            result.warnings.push(msg);
-            process.stderr.write(`Warning: ${msg}\n`);
-            continue;
-          }
-
-          const projectEntry = this.entryRepo.findById(parsed.id);
-          if (projectEntry) {
-            this.relationshipRepo.upsert(projectEntry.projectId, parsed.id, {
-              targetEntryId: rel.targetEntryId,
-              relationshipType: rel.relationshipType
-            });
-            result.restoredRelationships++;
-          }
-        }
-      }
-    });
-
-    doRestore();
-    return result;
   }
 
-  // ---------------------------------------------------------------------------
-  // Private helpers
-  // ---------------------------------------------------------------------------
+  /**
+   * Restore parsed memory entries and their tags to the repositories.
+   */
+  private restoreEntries(
+    entriesById: Map<string, ParsedMemoryEntry>,
+    project: { id: string },
+    result: RestoreResult
+  ): void {
+    for (const [, parsed] of entriesById) {
+      // Upsert source document if a path was recorded
+      let sourceDocumentId: string | null = null;
+      if (parsed.sourceDocumentPath) {
+        try {
+          const sourceDoc = this.sourceDocRepo.upsert(
+            project.id,
+            parsed.sourceDocumentPath,
+            '', // No checksum available from backup
+            parsed.updatedAt
+          );
+          sourceDocumentId = sourceDoc.id;
+        } catch {
+          // Non-fatal — continue without source document link
+        }
+      }
+
+      const contentHash = Buffer.from(
+        `${parsed.title}\n${parsed.content}\n${parsed.category}`
+      ).toString('base64');
+
+      const entry: MemoryEntry = MemoryEntrySchema.parse({
+        id: parsed.id,
+        projectId: project.id,
+        title: parsed.title,
+        content: parsed.content,
+        contentHash,
+        category: parsed.category,
+        source: parsed.sourceDocumentPath ? 'file' : 'backup',
+        sourceDocumentId,
+        createdAt: parsed.updatedAt,
+        updatedAt: parsed.updatedAt,
+        deletedAt: null
+      });
+
+      this.entryRepo.restore(entry);
+      this.tagRepo.replaceEntryTags(entry.id, parsed.tags);
+
+      result.restoredEntries++;
+    }
+  }
+
+  /**
+   * Restore relationships, ensuring dangling relationships are skipped.
+   */
+  private restoreRelationships(
+    entriesById: Map<string, ParsedMemoryEntry>,
+    projectId: string,
+    result: RestoreResult
+  ): void {
+    for (const [, parsed] of entriesById) {
+      for (const rel of parsed.relationships) {
+        const sourceExists = this.entryRepo.findById(parsed.id) !== null;
+        const targetExists = this.entryRepo.findById(rel.targetEntryId) !== null;
+
+        if (!sourceExists || !targetExists) {
+          const msg = `Skipping relationship "${rel.relationshipType}" from "${parsed.id}" to "${rel.targetEntryId}" — one or both entries not found.`;
+          result.warnings.push(msg);
+          process.stderr.write(`Warning: ${msg}\n`);
+          continue;
+        }
+
+        const projectEntry = this.entryRepo.findById(parsed.id);
+        if (projectEntry) {
+          this.relationshipRepo.upsert(projectEntry.projectId, parsed.id, {
+            targetEntryId: rel.targetEntryId,
+            relationshipType: rel.relationshipType
+          });
+          result.restoredRelationships++;
+        }
+      }
+    }
+  }
 
   /**
    * Attempt to extract the project name from any backup file's frontmatter.

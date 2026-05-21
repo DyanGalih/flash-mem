@@ -128,7 +128,7 @@ export class MarkdownExportService {
         id: entry.id,
         title: entry.title,
         content: entry.content,
-        entryType: entry.entryType,
+        category: entry.category,
         tags,
         updatedAt: entry.updatedAt,
         createdAt: entry.createdAt,
@@ -168,7 +168,7 @@ export class MarkdownExportService {
   }
 
   private matchesSection(sectionKey: ExportSectionKey, entry: ExportedMemoryEntry): boolean {
-    const haystack = `${entry.entryType} ${entry.tags.join(' ')}`.toLowerCase();
+    const haystack = `${entry.category} ${entry.tags.join(' ')}`.toLowerCase();
 
     switch (sectionKey) {
       case 'project-summary':

@@ -12,6 +12,7 @@ import { RelationshipRepository } from '../../src/infrastructure/database/reposi
 import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
 import { MarkdownExportService } from '../../src/application/services/MarkdownExportService';
 import { MarkdownRestoreService } from '../../src/application/services/MarkdownRestoreService';
+import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 
 async function exportWorkspace(workspaceRoot: string, dbFile: string): Promise<string> {
   const db = createDatabaseConnection(dbFile);
@@ -53,20 +54,29 @@ describe('Markdown Restore — Integration (export → restore cycle)', () => {
     const migSvc = new SchemaMigrationService(db);
     migSvc.ensureCurrentSchema();
     const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'integration-test');
-    const entrySvc = new MemoryEntryService(db);
+    const entrySvc = new MemoryEntryService(
+      new ProjectRepository(db),
+      new MemoryEntryRepository(db),
+      new TagRepository(db),
+      new RelationshipRepository(db),
+      new SourceDocumentRepository(db),
+      new SqliteTransactionRunner(db)
+    );
 
     const e1 = entrySvc.createMemoryEntry({
       projectId: project.id,
       title: 'Decision Alpha',
       content: 'We decided to use alpha pattern.',
-      entryType: 'decision',
+      category: 'decision',
+      source: 'test',
       tags: ['alpha', 'decision']
     })!;
     const e2 = entrySvc.createMemoryEntry({
       projectId: project.id,
       title: 'Bug Fix Beta',
       content: 'Fixed a bug in beta module.',
-      entryType: 'bug-fix',
+      category: 'bug-fix',
+      source: 'test',
       tags: ['beta', 'bug']
     })!;
     db.close();
@@ -84,13 +94,13 @@ describe('Markdown Restore — Integration (export → restore cycle)', () => {
 
     // 5. Restore from backups
     const service = new MarkdownRestoreService(
-      freshDb,
       new ProjectRepository(freshDb),
       new MemoryEntryRepository(freshDb),
       new TagRepository(freshDb),
       new RelationshipRepository(freshDb),
       new SourceDocumentRepository(freshDb),
-      new SchemaMigrationService(freshDb)
+      new SchemaMigrationService(freshDb),
+      new SqliteTransactionRunner(freshDb)
     );
 
     const result = service.restore(exportDir, workspaceRoot);
@@ -122,7 +132,14 @@ describe('Markdown Restore — Integration (export → restore cycle)', () => {
     const db = createDatabaseConnection(dbFile);
     new SchemaMigrationService(db).ensureCurrentSchema();
     const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'rel-test');
-    const entrySvc = new MemoryEntryService(db);
+    const entrySvc = new MemoryEntryService(
+      new ProjectRepository(db),
+      new MemoryEntryRepository(db),
+      new TagRepository(db),
+      new RelationshipRepository(db),
+      new SourceDocumentRepository(db),
+      new SqliteTransactionRunner(db)
+    );
     const relRepo = new RelationshipRepository(db);
 
     // Create both entries first (no inline relationships — avoids FK constraint with placeholder)
@@ -130,7 +147,8 @@ describe('Markdown Restore — Integration (export → restore cycle)', () => {
       projectId: project.id,
       title: 'Source Entry',
       content: 'This is the source.',
-      entryType: 'note',
+      category: 'note',
+      source: 'test',
       tags: []
     })!;
 
@@ -138,7 +156,8 @@ describe('Markdown Restore — Integration (export → restore cycle)', () => {
       projectId: project.id,
       title: 'Target Entry',
       content: 'This is the target.',
-      entryType: 'note',
+      category: 'note',
+      source: 'test',
       tags: []
     })!;
 
@@ -159,13 +178,13 @@ describe('Markdown Restore — Integration (export → restore cycle)', () => {
     new SchemaMigrationService(freshDb).ensureCurrentSchema();
 
     const svc = new MarkdownRestoreService(
-      freshDb,
       new ProjectRepository(freshDb),
       new MemoryEntryRepository(freshDb),
       new TagRepository(freshDb),
       new RelationshipRepository(freshDb),
       new SourceDocumentRepository(freshDb),
-      new SchemaMigrationService(freshDb)
+      new SchemaMigrationService(freshDb),
+      new SqliteTransactionRunner(freshDb)
     );
 
     const result = svc.restore(exportDir, workspaceRoot);
@@ -220,13 +239,13 @@ describe('Markdown Restore — Integration (export → restore cycle)', () => {
     const freshDb = createDatabaseConnection(dbFile);
     new SchemaMigrationService(freshDb).ensureCurrentSchema();
     const svc = new MarkdownRestoreService(
-      freshDb,
       new ProjectRepository(freshDb),
       new MemoryEntryRepository(freshDb),
       new TagRepository(freshDb),
       new RelationshipRepository(freshDb),
       new SourceDocumentRepository(freshDb),
-      new SchemaMigrationService(freshDb)
+      new SchemaMigrationService(freshDb),
+      new SqliteTransactionRunner(freshDb)
     );
     freshDb.close(); // Force failure
 

@@ -22,7 +22,7 @@ describe('MarkdownExportFormatter', () => {
       id: 'entry-1',
       title: 'Use SQLite',
       content: 'Store memory locally.',
-      entryType: 'decision',
+      category: 'decision',
       tags: ['sqlite', 'memory'],
       createdAt: 1_700_000_000_000,
       updatedAt: 1_700_000_000_000,

@@ -83,4 +83,21 @@ export class ProjectRepository implements IProjectRepository {
 
     return project;
   }
+
+  public clearProjectData(projectId: string): void {
+    this.db.prepare(`
+      DELETE FROM entries 
+      WHERE id IN (SELECT id FROM memory_entries WHERE project_id = ?)
+    `).run(projectId);
+
+    this.db.prepare(`
+      DELETE FROM entries_tags
+      WHERE entry_id NOT IN (SELECT id FROM entries)
+    `).run();
+
+    this.db.prepare(`DELETE FROM memory_entries WHERE project_id = ?`).run(projectId);
+    this.db.prepare(`DELETE FROM tags WHERE project_id = ?`).run(projectId);
+    this.db.prepare(`DELETE FROM relationships WHERE project_id = ?`).run(projectId);
+    this.db.prepare(`DELETE FROM source_documents WHERE project_id = ?`).run(projectId);
+  }
 }

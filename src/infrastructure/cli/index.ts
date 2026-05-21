@@ -8,6 +8,7 @@ import { MarkdownRestoreService } from '../../application/services/MarkdownResto
 import { SchemaMigrationService } from '../../application/services/SchemaMigrationService';
 import { MemoryEntryService } from '../../application/services/MemoryEntryService';
 import { IndexingService } from '../../application/services/IndexingService';
+import { startMcpServer } from '../../mcp/server';
 import { createDatabaseConnection } from '../../infrastructure/database/connection';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
 import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
@@ -17,6 +18,7 @@ import { TagRepository } from '../../infrastructure/database/repositories/TagRep
 import { RelationshipRepository } from '../../infrastructure/database/repositories/RelationshipRepository';
 import { SourceDocumentRepository } from '../../infrastructure/database/repositories/SourceDocumentRepository';
 import { IndexingRunRepository } from '../../infrastructure/database/repositories/IndexingRunRepository';
+import { SqliteTransactionRunner } from '../../infrastructure/database/SqliteTransactionRunner';
 
 const program = new Command();
 
@@ -203,30 +205,48 @@ program
             }
           }
 
-          let entryType = 'note';
-          if (relPath.includes('decision')) entryType = 'decision';
-          else if (relPath.includes('pattern')) entryType = 'pattern';
-          else if (relPath.includes('bug') || relPath.includes('fix')) entryType = 'bug-fix';
-          else if (relPath.includes('security')) entryType = 'security-note';
-          else if (relPath.includes('convention') || relPath.includes('style')) entryType = 'convention';
+          let category = 'note';
+          if (relPath.includes('decision')) category = 'decision';
+          else if (relPath.includes('pattern')) category = 'pattern';
+          else if (relPath.includes('bug') || relPath.includes('fix')) category = 'bug-fix';
+          else if (relPath.includes('security')) category = 'security-note';
+          else if (relPath.includes('convention') || relPath.includes('style')) category = 'convention';
 
           return {
             path: relPath,
             checksum,
             title,
             content,
-            entryType,
-            tags: [entryType]
+            category,
+            tags: [category]
           };
         });
 
+        const projectRepository = new ProjectRepository(db);
+        const memoryEntryRepository = new MemoryEntryRepository(db);
+        const tagRepository = new TagRepository(db);
+        const relationshipRepository = new RelationshipRepository(db);
+        const sourceDocumentRepository = new SourceDocumentRepository(db);
+        const indexingRunRepository = new IndexingRunRepository(db);
+        const transactionRunner = new SqliteTransactionRunner(db);
+        const schemaMigrationService = new SchemaMigrationService(db);
+
+        const memoryEntryService = new MemoryEntryService(
+          projectRepository,
+          memoryEntryRepository,
+          tagRepository,
+          relationshipRepository,
+          sourceDocumentRepository,
+          transactionRunner
+        );
+
         const indexingService = new IndexingService(
-          db,
-          new ProjectRepository(db),
-          new SourceDocumentRepository(db),
-          new IndexingRunRepository(db),
-          new MemoryEntryService(db),
-          new SchemaMigrationService(db)
+          projectRepository,
+          sourceDocumentRepository,
+          indexingRunRepository,
+          memoryEntryService,
+          schemaMigrationService,
+          transactionRunner
         );
 
         const results = indexingService.rebuildIndex(project.id, sources);
@@ -261,6 +281,35 @@ program
   });
 
 program
+  .command('mcp')
+  .description('Start the local MCP server over stdio')
+  .argument('[path]', 'The workspace path to serve', '.')
+  .action(async (dirArg) => {
+    try {
+      const workspaceRoot = path.resolve(process.cwd(), dirArg);
+      if (!fs.existsSync(workspaceRoot) || !fs.statSync(workspaceRoot).isDirectory()) {
+        throw new Error(`Workspace path "${workspaceRoot}" does not exist or is not a directory`);
+      }
+
+      const dbFile = PathSanitizer.sanitizeSubPath(workspaceRoot, '.flash-mem/flashmem.sqlite');
+      if (!fs.existsSync(dbFile)) {
+        throw new Error(`No SQLite memory store found at "${dbFile}". Run "flash-mem init" first.`);
+      }
+
+      const db = createDatabaseConnection(dbFile);
+      try {
+        await startMcpServer({ db });
+      } finally {
+        db.close();
+      }
+    } catch (err: any) {
+      const errMsg = err.message || 'Unknown error occurred while starting the MCP server';
+      process.stderr.write(`Error: ${errMsg}\n`);
+      process.exit(1);
+    }
+  });
+
+program
   .command('restore-backup')
   .description('Restore memory entries from markdown backup files')
   .argument('[path]', 'Path to the backup directory (defaults to .flash-mem/exports relative to workspace root)')
@@ -288,13 +337,13 @@ program
       const db = createDatabaseConnection(dbFile);
       try {
         const service = new MarkdownRestoreService(
-          db,
           new ProjectRepository(db),
           new MemoryEntryRepository(db),
           new TagRepository(db),
           new RelationshipRepository(db),
           new SourceDocumentRepository(db),
-          new SchemaMigrationService(db)
+          new SchemaMigrationService(db),
+          new SqliteTransactionRunner(db)
         );
 
         const result = service.restore(backupDirectory, workspaceRoot);
