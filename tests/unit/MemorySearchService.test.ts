@@ -57,7 +57,7 @@ describe('MemorySearchService', () => {
       projectId: project.id,
       title: 'SQLite memory store',
       content: 'Store engineering knowledge in SQLite',
-      category: 'note',
+      category: 'project',
       source: 'test',
       tags: ['sqlite', 'memory']
     });

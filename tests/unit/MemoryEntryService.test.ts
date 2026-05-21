@@ -44,13 +44,13 @@ describe('MemoryEntryService', () => {
       projectId: project.id,
       title: 'Initial memory',
       content: 'Remember the initial design',
-      category: 'note',
+      category: 'project',
       source: 'test',
       tags: ['SQLite', 'Memory']
     });
 
     expect(created?.title).toBe('Initial memory');
-    expect(created?.category).toBe('note');
+    expect(created?.category).toBe('project');
     expect(created?.source).toBe('test');
 
     const updated = service.updateMemoryEntry(created!.id, {
@@ -95,7 +95,7 @@ describe('MemoryEntryService', () => {
         projectId: project.id,
         title: 'Trapped memory',
         content: 'Content',
-        category: 'note',
+        category: 'project',
         source: 'test',
         relatedFiles: ['../../etc/passwd']
       });
@@ -105,7 +105,7 @@ describe('MemoryEntryService', () => {
       projectId: project.id,
       title: 'Valid memory',
       content: 'Content',
-      category: 'note',
+      category: 'project',
       source: 'test',
       relatedFiles: ['src/index.ts']
     });
@@ -124,7 +124,7 @@ describe('MemoryEntryService', () => {
       projectId: project.id,
       title: 'AWS key AKIA1234567890123456',
       content: 'The secret is AKIA1234567890123456',
-      category: 'note',
+      category: 'project',
       source: 'test'
     });
 

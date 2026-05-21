@@ -75,7 +75,7 @@ describe('Markdown Restore — Integration (export → restore cycle)', () => {
       projectId: project.id,
       title: 'Bug Fix Beta',
       content: 'Fixed a bug in beta module.',
-      category: 'bug-fix',
+      category: 'bug_fix',
       source: 'test',
       tags: ['beta', 'bug']
     })!;
@@ -147,7 +147,7 @@ describe('Markdown Restore — Integration (export → restore cycle)', () => {
       projectId: project.id,
       title: 'Source Entry',
       content: 'This is the source.',
-      category: 'note',
+      category: 'project',
       source: 'test',
       tags: []
     })!;
@@ -156,7 +156,7 @@ describe('Markdown Restore — Integration (export → restore cycle)', () => {
       projectId: project.id,
       title: 'Target Entry',
       content: 'This is the target.',
-      category: 'note',
+      category: 'project',
       source: 'test',
       tags: []
     })!;

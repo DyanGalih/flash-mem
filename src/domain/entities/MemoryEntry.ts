@@ -1,12 +1,27 @@
 import { z } from 'zod';
 
+export const VALID_CATEGORIES = [
+  'project',
+  'framework',
+  'architecture',
+  'convention',
+  'decision',
+  'pattern',
+  'bug_fix',
+  'security_note',
+  'dependency',
+  'risk',
+  'constraint',
+  'integration'
+] as const;
+
 export const MemoryEntrySchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1),
-  title: z.string().min(1),
-  content: z.string().min(1),
+  title: z.string().trim().min(1),
+  content: z.string().trim().min(1),
   contentHash: z.string().min(1),
-  category: z.string().min(1),
+  category: z.enum(VALID_CATEGORIES),
   source: z.string().min(1),
   confidence: z.number().int().min(0).max(100).nullable().optional(),
   relatedFiles: z.array(z.string().min(1)).nullable().optional(),
@@ -20,9 +35,9 @@ export type MemoryEntry = z.infer<typeof MemoryEntrySchema>;
 
 export const MemoryEntryInputSchema = z.object({
   projectId: z.string().min(1),
-  title: z.string().min(1),
-  content: z.string().min(1),
-  category: z.string().min(1),
+  title: z.string().trim().min(1),
+  content: z.string().trim().min(1),
+  category: z.enum(VALID_CATEGORIES),
   source: z.string().min(1),
   confidence: z.number().int().min(0).max(100).optional(),
   relatedFiles: z.array(z.string().min(1)).optional(),

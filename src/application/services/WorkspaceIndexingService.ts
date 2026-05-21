@@ -92,11 +92,11 @@ export class WorkspaceIndexingService {
         }
       }
 
-      let category = 'note';
+      let category = 'project';
       if (relPath.includes('decision')) category = 'decision';
       else if (relPath.includes('pattern')) category = 'pattern';
-      else if (relPath.includes('bug') || relPath.includes('fix')) category = 'bug-fix';
-      else if (relPath.includes('security')) category = 'security-note';
+      else if (relPath.includes('bug') || relPath.includes('fix')) category = 'bug_fix';
+      else if (relPath.includes('security')) category = 'security_note';
       else if (relPath.includes('convention') || relPath.includes('style')) category = 'convention';
 
       return {

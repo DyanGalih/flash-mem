@@ -64,7 +64,7 @@ describe('Memory Store Integration', () => {
       projectId: project.id,
       title: 'Store memory',
       content: 'SQLite-backed memory store',
-      category: 'note',
+      category: 'project',
       source: 'test',
       tags: ['sqlite', 'memory']
     });
@@ -76,7 +76,7 @@ describe('Memory Store Integration', () => {
       checksum: 'checksum-1',
       title: 'Overview',
       content: 'Store engineering memory',
-      category: 'note',
+      category: 'project',
       tags: ['docs']
     }]);
 

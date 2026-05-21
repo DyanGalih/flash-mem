@@ -341,7 +341,7 @@ export class MarkdownBackupParser {
       id,
       title: safeTitle,
       content: safeContent,
-      category: category ?? 'note',
+      category: category ?? 'project',
       tags,
       updatedAt: updatedAt ?? Date.now(),
       sourceDocumentPath,

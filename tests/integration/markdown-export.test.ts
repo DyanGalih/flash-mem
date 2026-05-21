@@ -57,7 +57,7 @@ describe('Markdown export integration', () => {
       projectId: project.id,
       title: 'Security note',
       content: 'Private key: -----BEGIN PRIVATE KEY-----abc-----END PRIVATE KEY-----',
-      category: 'security-note',
+      category: 'security_note',
       source: 'test',
       tags: ['security']
     });

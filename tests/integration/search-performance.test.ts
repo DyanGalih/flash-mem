@@ -48,7 +48,7 @@ describe('Search Performance', () => {
           title,
           content,
           `${title}:${content}`,
-          'note',
+          'project',
           'file',
           null,
           null,

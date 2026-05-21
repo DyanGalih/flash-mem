@@ -85,7 +85,7 @@ describe('MCP Server Foundation', () => {
           projectId: project.id,
           title: 'SDK-backed entry',
           content: 'Created through JSON-RPC',
-          category: 'note',
+          category: 'project',
           source: 'test',
           tags: ['rpc']
         }
@@ -110,7 +110,7 @@ describe('MCP Server Foundation', () => {
           projectId: project.id,
           title: 'Patch me',
           content: 'Original content',
-          category: 'note',
+          category: 'project',
           source: 'test',
           confidence: 80,
           related_files: ['src/a.ts']
@@ -157,7 +157,7 @@ describe('MCP Server Foundation', () => {
           projectId: project.id,
           title: 'Delete me',
           content: 'Will be soft deleted',
-          category: 'note',
+          category: 'project',
           source: 'test'
         }
       }

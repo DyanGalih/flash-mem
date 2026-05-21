@@ -2,11 +2,13 @@
 import { Command } from 'commander';
 import * as fs from 'fs-extra';
 import * as path from 'path';
+import * as readline from 'readline';
 import { InitializeProjectService } from '../../application/services/InitializeProjectService';
 import { MarkdownExportService } from '../../application/services/MarkdownExportService';
 import { MarkdownRestoreService } from '../../application/services/MarkdownRestoreService';
 import { SchemaMigrationService } from '../../application/services/SchemaMigrationService';
 import { MemoryEntryService } from '../../application/services/MemoryEntryService';
+import { VALID_CATEGORIES } from '../../domain/entities/MemoryEntry';
 import { IndexingService } from '../../application/services/IndexingService';
 import { startMcpServer } from '../../mcp/server';
 import { createDatabaseConnection } from '../../infrastructure/database/connection';
@@ -205,11 +207,11 @@ program
             }
           }
 
-          let category = 'note';
+          let category = 'project';
           if (relPath.includes('decision')) category = 'decision';
           else if (relPath.includes('pattern')) category = 'pattern';
-          else if (relPath.includes('bug') || relPath.includes('fix')) category = 'bug-fix';
-          else if (relPath.includes('security')) category = 'security-note';
+          else if (relPath.includes('bug') || relPath.includes('fix')) category = 'bug_fix';
+          else if (relPath.includes('security')) category = 'security_note';
           else if (relPath.includes('convention') || relPath.includes('style')) category = 'convention';
 
           return {
@@ -268,6 +270,219 @@ program
       }
     } catch (err: any) {
       const errMsg = err.message || 'Unknown error occurred during index rebuild';
+      process.stderr.write(`Error: ${errMsg}\n`);
+
+      if (useJson) {
+        process.stdout.write(JSON.stringify({
+          success: false,
+          error: errMsg
+        }, null, 2) + '\n');
+      }
+      process.exit(1);
+    }
+  });
+
+program
+  .command('add')
+  .description('Add a new memory entry')
+  .option('--title <string>', 'Title of the memory entry')
+  .option('--summary <string>', 'Summary/content of the memory entry')
+  .option('--category <string>', 'Category of the memory entry')
+  .option('--source <string>', 'Source of the memory entry')
+  .option('--tags <items>', 'Comma-separated tags')
+  .option('--confidence <number>', 'Confidence score (0-100)', (val) => parseInt(val, 10))
+  .option('--related-files <items>', 'Comma-separated relative file paths')
+  .option('--project-path <path>', 'Path to the workspace root directory (defaults to current working directory)', '.')
+  .option('-i, --interactive', 'Interactively prompt for missing fields')
+  .option('-j, --json', 'Output structured JSON instead of plain text')
+  .action(async (options) => {
+    const useJson = !!options.json;
+    const isInteractive = !!options.interactive;
+
+    try {
+      // 1. Resolve and validate workspace root using PathSanitizer.resolveRoot (SEC-001)
+      const resolvedWorkspace = PathSanitizer.resolveRoot(options.projectPath ?? '.');
+      if (!fs.existsSync(resolvedWorkspace) || !fs.statSync(resolvedWorkspace).isDirectory()) {
+        throw new Error(`Workspace path "${resolvedWorkspace}" does not exist or is not a directory`);
+      }
+
+      // 2. Resolve database path relative to workspace root (SEC-001)
+      const dbFile = PathSanitizer.sanitizeSubPath(resolvedWorkspace, '.flash-mem/flashmem.sqlite');
+      if (!fs.existsSync(dbFile)) {
+        throw new Error(`No SQLite memory store found at "${dbFile}". Run "flash-mem init" first.`);
+      }
+
+      let title = options.title?.trim();
+      let summary = options.summary?.trim();
+      let category = options.category?.trim();
+      let source = options.source?.trim();
+
+      // If interactive, prompt for missing required fields
+      if (isInteractive) {
+        const rl = readline.createInterface({
+          input: process.stdin,
+          output: process.stderr
+        });
+
+        const linesQueue: string[] = [];
+        let pendingResolve: ((value: string) => void) | null = null;
+
+        rl.on('line', (line) => {
+          const trimmed = line.trim();
+          if (pendingResolve) {
+            const resolve = pendingResolve;
+            pendingResolve = null;
+            resolve(trimmed);
+          } else {
+            linesQueue.push(trimmed);
+          }
+        });
+
+        const ask = (query: string): Promise<string> => {
+          process.stderr.write(query);
+          const nextLine = linesQueue.shift();
+          if (nextLine !== undefined) {
+            return Promise.resolve(nextLine);
+          }
+          return new Promise((resolve) => {
+            pendingResolve = resolve;
+          });
+        };
+
+        try {
+          if (!title) {
+            while (!title) {
+              title = await ask('Enter title (required): ');
+              if (!title) {
+                process.stderr.write('Title cannot be empty.\n');
+              }
+            }
+          }
+
+          if (!summary) {
+            while (!summary) {
+              summary = await ask('Enter summary (required): ');
+              if (!summary) {
+                process.stderr.write('Summary cannot be empty.\n');
+              }
+            }
+          }
+
+          const validCategories = VALID_CATEGORIES as readonly string[];
+          if (!category || !validCategories.includes(category)) {
+            while (!category || !validCategories.includes(category)) {
+              const promptMsg = category 
+                ? `Invalid category "${category}".\nChoose one of: ${validCategories.join(', ')}\nEnter category: `
+                : `Enter category (${validCategories.join(', ')}): `;
+              category = await ask(promptMsg);
+              if (!category) {
+                process.stderr.write('Category cannot be empty.\n');
+              }
+            }
+          }
+
+          if (!source) {
+            while (!source) {
+              source = await ask('Enter source (required, e.g., cli, mcp, user): ');
+              if (!source) {
+                process.stderr.write('Source cannot be empty.\n');
+              }
+            }
+          }
+        } finally {
+          rl.close();
+        }
+      }
+
+      // 3. Validate presence of required fields (if not interactive)
+      const missingFields: string[] = [];
+      if (!title) missingFields.push('title');
+      if (!summary) missingFields.push('summary');
+      if (!category) missingFields.push('category');
+      if (!source) missingFields.push('source');
+
+      if (missingFields.length > 0) {
+        throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
+      }
+
+      // Parse tags and related files if provided
+      let tags: string[] = [];
+      if (options.tags) {
+        tags = options.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
+        // Deduplicate tags
+        tags = Array.from(new Set(tags));
+      }
+
+      let relatedFiles: string[] = [];
+      if (options.relatedFiles) {
+        relatedFiles = options.relatedFiles.split(',').map((f: string) => f.trim()).filter(Boolean);
+      }
+
+      const confidence = options.confidence !== undefined ? options.confidence : undefined;
+
+      // 4. Initialize Database and Services
+      const db = createDatabaseConnection(dbFile);
+      try {
+        const projectRepo = new ProjectRepository(db);
+        const project = projectRepo.upsertByRootPath(resolvedWorkspace, path.basename(resolvedWorkspace));
+
+        const memoryEntryRepository = new MemoryEntryRepository(db);
+        const tagRepository = new TagRepository(db);
+        const relationshipRepository = new RelationshipRepository(db);
+        const sourceDocumentRepository = new SourceDocumentRepository(db);
+        const transactionRunner = new SqliteTransactionRunner(db);
+
+        const memoryEntryService = new MemoryEntryService(
+          projectRepo,
+          memoryEntryRepository,
+          tagRepository,
+          relationshipRepository,
+          sourceDocumentRepository,
+          transactionRunner
+        );
+
+        const entry = memoryEntryService.createMemoryEntry({
+          projectId: project.id,
+          title,
+          content: summary,
+          category: category as any,
+          source,
+          tags,
+          confidence,
+          relatedFiles
+        });
+
+        if (!entry) {
+          throw new Error('Failed to create memory entry');
+        }
+
+        if (useJson) {
+          process.stdout.write(JSON.stringify({
+            success: true,
+            id: entry.id,
+            entry: {
+              id: entry.id,
+              title: entry.title,
+              content: entry.content,
+              category: entry.category,
+              source: entry.source,
+              tags: tags,
+              confidence: entry.confidence,
+              relatedFiles: entry.relatedFiles,
+              createdAt: entry.createdAt,
+              updatedAt: entry.updatedAt
+            }
+          }, null, 2) + '\n');
+        } else {
+          process.stdout.write(`Memory entry added successfully! ID: ${entry.id}\n`);
+        }
+
+        process.exit(0);
+      } finally {
+        db.close();
+      }
+    } catch (err: any) {
+      const errMsg = err.message || 'Unknown error occurred during add';
       process.stderr.write(`Error: ${errMsg}\n`);
 
       if (useJson) {

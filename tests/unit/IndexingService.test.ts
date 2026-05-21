@@ -71,7 +71,7 @@ describe('IndexingService', () => {
       checksum: 'abc123',
       title: 'SQLite memory',
       content: 'Store memory locally',
-      category: 'note',
+      category: 'project',
       tags: ['sqlite']
     }];
 
@@ -94,7 +94,7 @@ describe('IndexingService', () => {
         checksum: 'ignored',
         title: 'Private',
         content: 'This should not be stored',
-        category: 'note',
+        category: 'project',
         tags: ['ignore-me']
       },
       {
@@ -102,7 +102,7 @@ describe('IndexingService', () => {
         checksum: 'secret-1',
         title: 'API key inventory',
         content: 'api_key=YOUR_API_KEY\n-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----',
-        category: 'note',
+        category: 'project',
         tags: ['secret']
       }
     ];

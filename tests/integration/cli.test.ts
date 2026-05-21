@@ -161,5 +161,157 @@ describe('CLI Integration', () => {
       db.close();
     }
   });
+
+  it('should successfully add a memory entry via CLI with valid arguments', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+    const { stdout, stderr } = await execAsync(
+      `node ${cliScript} add --title "CLI Memory" --summary "Adding memory via CLI" --category "decision" --source "cli" --project-path "${testWorkspace}"`
+    );
+
+    expect(stderr).toBe('');
+    expect(stdout).toContain('Memory entry added successfully!');
+    expect(stdout).toContain('ID:');
+
+    // Verify it is in database
+    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const db = createDatabaseConnection(dbFile);
+    try {
+      const row = db.prepare(`SELECT * FROM memory_entries WHERE title = 'CLI Memory'`).get() as any;
+      expect(row).toBeDefined();
+      expect(row.content).toBe('Adding memory via CLI');
+      expect(row.category).toBe('decision');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('should output JSON when --json option is passed', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+    const { stdout, stderr } = await execAsync(
+      `node ${cliScript} add --title "JSON Memory" --summary "Adding JSON memory" --category "framework" --source "cli" --project-path "${testWorkspace}" --json`
+    );
+
+    expect(stderr).toBe('');
+    const result = JSON.parse(stdout.trim());
+    expect(result.success).toBe(true);
+    expect(result.entry.title).toBe('JSON Memory');
+    expect(result.entry.category).toBe('framework');
+  });
+
+  it('should reject missing required arguments when not in interactive mode', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+    try {
+      await execAsync(
+        `node ${cliScript} add --title "Missing Info" --project-path "${testWorkspace}"`
+      );
+      expect(true).toBe(false);
+    } catch (err: any) {
+      expect(err.code).toBe(1);
+      expect(err.stderr).toContain('Error: Missing required fields: summary, category, source');
+    }
+  });
+
+  it('should validate category constraints and reject invalid category', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+    try {
+      await execAsync(
+        `node ${cliScript} add --title "Bad Category" --summary "Some content" --category "invalid-cat" --source "cli" --project-path "${testWorkspace}"`
+      );
+      expect(true).toBe(false);
+    } catch (err: any) {
+      expect(err.code).toBe(1);
+      expect(err.stderr).toContain('invalid_enum_value');
+    }
+  });
+
+  it('should prevent directory traversal and exit with 1 on invalid project path', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+    try {
+      await execAsync(
+        `node ${cliScript} add --title "Traversal" --summary "content" --category "decision" --source "cli" --project-path "${testWorkspace}/non-existent"`
+      );
+      expect(true).toBe(false);
+    } catch (err: any) {
+      expect(err.code).toBe(1);
+      expect(err.stderr).toContain('does not exist or is not a directory');
+    }
+  });
+
+  it('should redact secrets from title and summary', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+    const { stdout, stderr } = await execAsync(
+      `node ${cliScript} add --title "AWS key AKIA1234567890123456" --summary "Secret is AKIA1234567890123456" --category "security_note" --source "cli" --project-path "${testWorkspace}" --json`
+    );
+
+    expect(stderr).toBe('');
+    const result = JSON.parse(stdout.trim());
+    expect(result.success).toBe(true);
+    expect(result.entry.title).toContain('[REDACTED_SECRET]');
+    expect(result.entry.content).toContain('[REDACTED_SECRET]');
+  });
+
+  it('should interactively prompt for missing fields', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+    
+    const runInteractive = () => {
+      return new Promise<{ stdout: string; stderr: string; code: number }>((resolve) => {
+        const child = exec(`node ${cliScript} add -i --project-path "${testWorkspace}"`);
+        let stdout = '';
+        let stderr = '';
+        
+        child.stdout?.on('data', (data) => stdout += data);
+        child.stderr?.on('data', (data) => stderr += data);
+        
+        child.on('close', (code) => {
+          resolve({ stdout, stderr, code: code ?? 0 });
+        });
+
+        child.stdin?.write('Interactive Title\n');
+        child.stdin?.write('Interactive Content\n');
+        child.stdin?.write('decision\n');
+        child.stdin?.write('cli-interactive\n');
+        child.stdin?.end();
+      });
+    };
+
+    const { stdout, stderr, code } = await runInteractive();
+    expect(code).toBe(0);
+    expect(stdout).toContain('Memory entry added successfully!');
+    
+    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const db = createDatabaseConnection(dbFile);
+    try {
+      const row = db.prepare(`SELECT * FROM memory_entries WHERE title = 'Interactive Title'`).get() as any;
+      expect(row).toBeDefined();
+      expect(row.content).toBe('Interactive Content');
+      expect(row.category).toBe('decision');
+      expect(row.source).toBe('cli-interactive');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('should reject whitespace-only title and content with trim validation', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+    try {
+      await execAsync(
+        `node ${cliScript} add --title "   " --summary "Valid content" --category "decision" --source "cli" --project-path "${testWorkspace}"`
+      );
+      expect(true).toBe(false);
+    } catch (err: any) {
+      expect(err.code).toBe(1);
+      expect(err.stderr).toContain('Missing required fields: title');
+    }
+
+    try {
+      await execAsync(
+        `node ${cliScript} add --title "Valid Title" --summary "   " --category "decision" --source "cli" --project-path "${testWorkspace}"`
+      );
+      expect(true).toBe(false);
+    } catch (err: any) {
+      expect(err.code).toBe(1);
+      expect(err.stderr).toContain('Missing required fields: summary');
+    }
+  });
 });
 
