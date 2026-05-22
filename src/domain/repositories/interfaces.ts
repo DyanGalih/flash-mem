@@ -1,5 +1,6 @@
 import { Project } from '../entities/Project';
 import { MemoryEntry, MemoryEntryInput } from '../entities/MemoryEntry';
+import { ProjectSummary, ProjectSummaryInput } from '../entities/ProjectSummary';
 import { Tag } from '../entities/Tag';
 import { Relationship, RelationshipInput } from '../entities/Relationship';
 import { SourceDocument } from '../entities/SourceDocument';
@@ -14,6 +15,11 @@ export interface IProjectRepository {
   upsertByRootPath(rootPath: string, name: string): Project;
   findById(projectId: string): Project | null;
   clearProjectData(projectId: string): void;
+}
+
+export interface IProjectSummaryRepository {
+  findByProjectId(projectId: string): ProjectSummary | null;
+  upsert(projectId: string, input: ProjectSummaryInput): ProjectSummary;
 }
 
 export interface MemorySearchOptions {

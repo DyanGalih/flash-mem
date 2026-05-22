@@ -11,6 +11,7 @@ import { createMcpServer, startMcpServer } from '../../src/mcp/server';
 describe('MCP Server Foundation', () => {
   let db: any;
   const testDbFile = path.resolve(__dirname, 'mcp-tools-workspace', 'flashmem.sqlite');
+  const workspaceRoot = path.dirname(testDbFile);
 
   beforeEach(() => {
     fs.removeSync(path.dirname(testDbFile));
@@ -26,12 +27,13 @@ describe('MCP Server Foundation', () => {
   });
 
   it('registers the required tools with schemas', () => {
-    const project = new ProjectRepository(db).upsertByRootPath(path.dirname(testDbFile), 'mcp-tools-workspace');
-    const server = createMcpServer({ db });
+    const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
+    const server = createMcpServer({ db, workspaceRoot });
 
     const toolNames = server.listTools().map((tool) => tool.name);
     expect(toolNames).toEqual(expect.arrayContaining([
       'get_project_summary',
+      'update_project_summary',
       'search_memory',
       'get_relevant_context',
       'add_memory',
@@ -44,11 +46,12 @@ describe('MCP Server Foundation', () => {
 
   it('discovers the required tools within the startup target window', () => {
     const start = performance.now();
-    const server = createMcpServer({ db });
+    const server = createMcpServer({ db, workspaceRoot });
     const elapsed = performance.now() - start;
 
     expect(server.listTools().map((tool) => tool.name)).toEqual(expect.arrayContaining([
       'get_project_summary',
+      'update_project_summary',
       'search_memory',
       'get_relevant_context',
       'add_memory',
@@ -59,8 +62,8 @@ describe('MCP Server Foundation', () => {
   });
 
   it('responds to JSON-RPC tool listing and tool calls', async () => {
-    const project = new ProjectRepository(db).upsertByRootPath(path.dirname(testDbFile), 'mcp-tools-workspace');
-    const server = createMcpServer({ db });
+    const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
+    const server = createMcpServer({ db, workspaceRoot });
 
     const listResponse = await server.handleRequest({
       jsonrpc: '2.0',
@@ -96,8 +99,8 @@ describe('MCP Server Foundation', () => {
   });
 
   it('supports update_memory tool with PATCH semantics and null clearing', async () => {
-    const project = new ProjectRepository(db).upsertByRootPath(path.dirname(testDbFile), 'mcp-tools-workspace');
-    const server = createMcpServer({ db });
+    const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
+    const server = createMcpServer({ db, workspaceRoot });
 
     // 1. Add entry
     const addResponse = (await server.handleRequest({
@@ -143,8 +146,8 @@ describe('MCP Server Foundation', () => {
   });
 
   it('supports delete_memory tool with soft delete', async () => {
-    const project = new ProjectRepository(db).upsertByRootPath(path.dirname(testDbFile), 'mcp-tools-workspace');
-    const server = createMcpServer({ db });
+    const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
+    const server = createMcpServer({ db, workspaceRoot });
 
     // 1. Add entry
     const addResponse = (await server.handleRequest({
@@ -199,8 +202,8 @@ describe('MCP Server Foundation', () => {
   });
 
   it('keeps the first-attempt success rate above the reliability target', async () => {
-    const project = new ProjectRepository(db).upsertByRootPath(path.dirname(testDbFile), 'mcp-tools-workspace');
-    const server = createMcpServer({ db });
+    const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
+    const server = createMcpServer({ db, workspaceRoot });
     const attempts = 20;
     let successes = 0;
 
@@ -227,7 +230,7 @@ describe('MCP Server Foundation', () => {
   });
 
   it('serves JSON-RPC over stdio', async () => {
-    const project = new ProjectRepository(db).upsertByRootPath(path.dirname(testDbFile), 'mcp-tools-workspace');
+    new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
     const input = new PassThrough();
     const output = new PassThrough();
     const error = new PassThrough();
@@ -241,7 +244,7 @@ describe('MCP Server Foundation', () => {
       errorChunks.push(chunk.toString('utf8'));
     });
 
-    const serverPromise = startMcpServer({ db }, { input, output, error });
+    const serverPromise = startMcpServer({ db, workspaceRoot }, { input, output, error });
 
     input.write(`${JSON.stringify({
       jsonrpc: '2.0',
@@ -249,9 +252,7 @@ describe('MCP Server Foundation', () => {
       method: 'tools/call',
       params: {
         name: 'get_project_summary',
-        arguments: {
-          projectId: project.id
-        }
+        arguments: {}
       }
     })}\n`);
     input.end();
@@ -263,11 +264,104 @@ describe('MCP Server Foundation', () => {
       jsonrpc: '2.0',
       id: 3,
       result: {
-        project: expect.objectContaining({
-          id: project.id
-        })
+        status: 'missing'
       }
     });
     expect(errorChunks.join('')).toBe('');
+  });
+
+  it('supports get and update project summary tools without projectId arguments', async () => {
+    const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
+    const server = createMcpServer({ db, workspaceRoot, summaryWriteAccessEnabled: true });
+
+    const emptyResponse = await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 30,
+      method: 'tools/call',
+      params: {
+        name: 'get_project_summary',
+        arguments: {}
+      }
+    });
+
+    expect(emptyResponse.error).toBeUndefined();
+    expect(emptyResponse.result).toMatchObject({
+      status: 'missing'
+    });
+
+    const updateResponse = await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 31,
+      method: 'tools/call',
+      params: {
+        name: 'update_project_summary',
+        arguments: {
+          projectName: 'mcp-tools-workspace',
+          purpose: 'Compact project summary for AI agents',
+          techStack: 'Node.js, TypeScript, better-sqlite3, Zod',
+          architectureStyle: 'Layered local MCP server',
+          importantConventions: 'Validate at the boundary and keep transport thin',
+          knownConstraints: 'No network egress; local SQLite only',
+          securitySensitiveAreas: 'MCP handlers, repository layer, path handling'
+        }
+      }
+    });
+
+    expect(updateResponse.error).toBeUndefined();
+    expect(updateResponse.result).toMatchObject({
+      status: 'updated',
+      project: expect.objectContaining({
+        id: project.id
+      }),
+      summary: expect.objectContaining({
+        projectName: 'mcp-tools-workspace'
+      })
+    });
+
+    const readyResponse = await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 32,
+      method: 'tools/call',
+      params: {
+        name: 'get_project_summary',
+        arguments: {}
+      }
+    });
+
+    expect(readyResponse.result).toMatchObject({
+      status: 'ready',
+      project: expect.objectContaining({
+        id: project.id
+      }),
+      summary: expect.objectContaining({
+        projectName: 'mcp-tools-workspace'
+      })
+    });
+  });
+
+  it('rejects update_project_summary when write capability is disabled', async () => {
+    new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
+    const server = createMcpServer({ db, workspaceRoot });
+
+    const response = await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 40,
+      method: 'tools/call',
+      params: {
+        name: 'update_project_summary',
+        arguments: {
+          projectName: 'mcp-tools-workspace',
+          purpose: 'Compact project summary for AI agents',
+          techStack: 'Node.js, TypeScript, better-sqlite3, Zod',
+          architectureStyle: 'Layered local MCP server',
+          importantConventions: 'Validate at the boundary and keep transport thin',
+          knownConstraints: 'No network egress; local SQLite only',
+          securitySensitiveAreas: 'MCP handlers, repository layer, path handling'
+        }
+      }
+    });
+
+    expect(response.error).toBeDefined();
+    expect(response.error?.message).toContain('Authorization error');
   });
 });

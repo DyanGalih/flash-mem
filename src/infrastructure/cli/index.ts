@@ -719,7 +719,11 @@ program
 
       const db = createDatabaseConnection(dbFile);
       try {
-        await startMcpServer({ db });
+        await startMcpServer({
+          db,
+          workspaceRoot,
+          summaryWriteAccessEnabled: process.env.FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES === '1'
+        });
       } finally {
         db.close();
       }

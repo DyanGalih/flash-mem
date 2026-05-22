@@ -1,8 +1,7 @@
 import * as path from 'path';
 import { MemorySearchService } from './MemorySearchService';
-import { ProjectSummaryService, ProjectSummaryResult } from './ProjectSummaryService';
 import { MemoryEntryService } from './MemoryEntryService';
-import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
+import { IProjectRepository } from '../../domain/repositories/interfaces';
 
 export interface CompactMemoryEntry {
   id: string;
@@ -35,7 +34,7 @@ export interface RelevantContextResult {
 
 export class RelevantContextService {
   constructor(
-    private readonly projectSummaryService: ProjectSummaryService,
+    private readonly projectRepository: IProjectRepository,
     private readonly memorySearchService: MemorySearchService
   ) {}
 
@@ -46,8 +45,11 @@ export class RelevantContextService {
     }
 
     // 2. Fetch project metadata (also validates projectId)
-    const summary = this.projectSummaryService.getProjectSummary(projectId);
-    const absoluteRoot = PathSanitizer.resolveRoot(summary.project.rootPath);
+    const project = this.projectRepository.findById(projectId);
+    if (!project) {
+      throw new Error(`Unknown project "${projectId}"`);
+    }
+    const absoluteRoot = path.resolve(project.rootPath);
 
     // 3. Retrieve matches with a higher candidate limit to ensure we have enough items to distribute
     const searchResult = this.memorySearchService.search({
@@ -194,11 +196,11 @@ export class RelevantContextService {
 
     return {
       project: {
-        id: summary.project.id,
-        name: summary.project.name,
-        rootPath: summary.project.rootPath,
-        createdAt: summary.project.createdAt,
-        updatedAt: summary.project.updatedAt
+        id: project.id,
+        name: project.name,
+        rootPath: project.rootPath,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt
       },
       query: query.trim(),
       context,

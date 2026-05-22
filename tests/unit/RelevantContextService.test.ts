@@ -11,14 +11,12 @@ import { SourceDocumentRepository } from '../../src/infrastructure/database/repo
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { MemorySearchService } from '../../src/application/services/MemorySearchService';
-import { ProjectSummaryService } from '../../src/application/services/ProjectSummaryService';
 import { RelevantContextService } from '../../src/application/services/RelevantContextService';
 
 describe('RelevantContextService', () => {
   let db: any;
   let entryService: MemoryEntryService;
   let searchService: MemorySearchService;
-  let projectSummaryService: ProjectSummaryService;
   let relevantContextService: RelevantContextService;
   let projectRepo: ProjectRepository;
   let memoryEntryRepo: MemoryEntryRepository;
@@ -47,15 +45,8 @@ describe('RelevantContextService', () => {
     );
 
     searchService = new MemorySearchService(memoryEntryRepo, tagRepo, projectRepo);
-    projectSummaryService = new ProjectSummaryService(
-      projectRepo,
-      memoryEntryRepo,
-      tagRepo,
-      relationshipRepo,
-      sourceDocumentRepo
-    );
 
-    relevantContextService = new RelevantContextService(projectSummaryService, searchService);
+    relevantContextService = new RelevantContextService(projectRepo, searchService);
   });
 
   afterEach(() => {

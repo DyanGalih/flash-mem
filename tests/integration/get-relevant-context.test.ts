@@ -10,6 +10,7 @@ import { createMcpServer } from '../../src/mcp/server';
 describe('get_relevant_context tool integration', () => {
   let db: any;
   const testDbFile = path.resolve(__dirname, 'get-relevant-context-workspace', 'flashmem.sqlite');
+  const workspaceRoot = path.dirname(testDbFile);
 
   beforeEach(() => {
     fs.removeSync(path.dirname(testDbFile));
@@ -25,8 +26,8 @@ describe('get_relevant_context tool integration', () => {
   });
 
   it('registers the get_relevant_context tool and conforms to JSON-RPC scheme', async () => {
-    const project = new ProjectRepository(db).upsertByRootPath(path.dirname(testDbFile), 'get-relevant-context-workspace');
-    const server = createMcpServer({ db });
+    const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'get-relevant-context-workspace');
+    const server = createMcpServer({ db, workspaceRoot });
 
     // Seed some test data via add_memory tool
     await server.handleRequest({
@@ -113,8 +114,8 @@ describe('get_relevant_context tool integration', () => {
   });
 
   it('rejects empty and whitespace-only queries via JSON-RPC validation', async () => {
-    const project = new ProjectRepository(db).upsertByRootPath(path.dirname(testDbFile), 'get-relevant-context-workspace');
-    const server = createMcpServer({ db });
+    const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'get-relevant-context-workspace');
+    const server = createMcpServer({ db, workspaceRoot });
 
     const response = await server.handleRequest({
       jsonrpc: '2.0',
