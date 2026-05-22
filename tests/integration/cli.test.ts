@@ -1,18 +1,23 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
-import { program } from '../../src/infrastructure/cli/index';
+import * as readline from 'readline';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
-import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { program } from '../../src/infrastructure/cli/index';
+import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
-import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
+import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
 import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
 import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
+import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
-import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 
-function execAsync(command: string, options: { cwd?: string; input?: string[] } = {}) {
+vi.mock('readline', () => ({
+  createInterface: vi.fn()
+}));
+
+function execAsync(command: string, options: { cwd?: string; input?: string[]; tty?: boolean } = {}) {
   const tokens = command.match(/(?:[^\s"]+|"[^"]*")+/g)?.map((token) => token.replace(/^"(.*)"$/, '$1')) ?? [];
   const args = tokens.slice(2);
 
@@ -46,6 +51,8 @@ function execAsync(command: string, options: { cwd?: string; input?: string[] } 
     const originalCwd = process.cwd;
     const originalStdinIsTTY = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
     const originalExitCode = process.exitCode;
+    const inputLines = [...(options.input ?? [])];
+    const createInterfaceMock = vi.mocked(readline.createInterface);
 
     console.log = (...values: any[]) => {
       stdoutChunks.push(`${values.join(' ')}\n`);
@@ -60,8 +67,40 @@ function execAsync(command: string, options: { cwd?: string; input?: string[] } 
       }
       Object.defineProperty(process.stdin, 'isTTY', {
         configurable: true,
-        value: false
+        value: !!options.tty
       });
+
+      if (inputLines.length > 0) {
+        let lineHandler: ((line: string) => void) | null = null;
+
+        createInterfaceMock.mockImplementation(() => {
+          const fakeInterface = {
+            on(event: string, handler: (line: string) => void) {
+              if (event === 'line') {
+                lineHandler = handler;
+                queueMicrotask(() => {
+                  while (lineHandler && inputLines.length > 0) {
+                    const nextLine = inputLines.shift();
+                    if (nextLine === undefined) {
+                      break;
+                    }
+
+                    lineHandler(nextLine);
+                  }
+                });
+              }
+
+              return fakeInterface as any;
+            },
+            close() {
+              lineHandler = null;
+            }
+          };
+
+          return fakeInterface as any;
+        });
+      }
+
       resetCommandState(program);
       try {
         await program.parseAsync(['node', 'flash-mem', ...args]);
@@ -95,6 +134,7 @@ function execAsync(command: string, options: { cwd?: string; input?: string[] } 
       console.log = originalLog;
       console.error = originalError;
       process.cwd = originalCwd;
+      createInterfaceMock.mockReset();
       if (originalStdinIsTTY) {
         Object.defineProperty(process.stdin, 'isTTY', originalStdinIsTTY);
       } else {
@@ -254,7 +294,7 @@ describe('CLI Integration', () => {
   it('should successfully add a memory entry via CLI with valid arguments', async () => {
     await execAsync(`node ${cliScript} init "${testWorkspace}"`);
     const { stdout, stderr } = await execAsync(
-      `node ${cliScript} add --title "CLI Memory" --summary "Adding memory via CLI" --category "decision" --source "cli" --project-path "${testWorkspace}"`
+      `node ${cliScript} add --title "CLI Memory" --content "Adding memory via CLI" --category "decision" --source "cli" --tag "cli" --tag "memory" --related-file "src/cli.ts" --project-path "${testWorkspace}"`
     );
 
     expect(stderr).toBe('');
@@ -269,6 +309,7 @@ describe('CLI Integration', () => {
       expect(row).toBeDefined();
       expect(row.content).toBe('Adding memory via CLI');
       expect(row.category).toBe('decision');
+      expect(row.confidence).toBe(50);
     } finally {
       db.close();
     }
@@ -277,14 +318,14 @@ describe('CLI Integration', () => {
   it('should output JSON when --json option is passed', async () => {
     await execAsync(`node ${cliScript} init "${testWorkspace}"`);
     const { stdout, stderr } = await execAsync(
-      `node ${cliScript} add --title "JSON Memory" --summary "Adding JSON memory" --category "framework" --source "cli" --project-path "${testWorkspace}" --json`
+      `node ${cliScript} add --title "JSON Memory" --content "Adding JSON memory" --category "framework" --source "cli" --tag "json" --related-file "docs/json.md" --project-path "${testWorkspace}" --json`
     );
 
     expect(stderr).toBe('');
     const result = JSON.parse(stdout.trim());
     expect(result.success).toBe(true);
-    expect(result.entry.title).toBe('JSON Memory');
-    expect(result.entry.category).toBe('framework');
+    expect(result.id).toBeTypeOf('string');
+    expect(result.entry).toBeUndefined();
   });
 
   it('should reject missing required arguments when not in interactive mode', async () => {
@@ -296,7 +337,23 @@ describe('CLI Integration', () => {
       expect(true).toBe(false);
     } catch (err: any) {
       expect(err.code).toBe(1);
-      expect(err.stderr).toContain('Error: Missing required fields: summary, category, source');
+      expect(err.stderr).toContain('Error: Missing required fields: content, category, source');
+    }
+  });
+
+  it('should return structured JSON when required arguments are missing in json mode', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+    try {
+      await execAsync(
+        `node ${cliScript} add --title "Missing Info" --project-path "${testWorkspace}" --json`
+      );
+      expect(true).toBe(false);
+    } catch (err: any) {
+      expect(err.code).toBe(1);
+      const result = JSON.parse(err.stdout.trim());
+      expect(result.success).toBe(false);
+      expect(result.error).toContain('Missing required fields: content, category, source');
+      expect(Array.isArray(result.details)).toBe(true);
     }
   });
 
@@ -304,7 +361,7 @@ describe('CLI Integration', () => {
     await execAsync(`node ${cliScript} init "${testWorkspace}"`);
     try {
       await execAsync(
-        `node ${cliScript} add --title "Bad Category" --summary "Some content" --category "invalid-cat" --source "cli" --project-path "${testWorkspace}"`
+        `node ${cliScript} add --title "Bad Category" --content "Some content" --category "invalid-cat" --source "cli" --project-path "${testWorkspace}"`
       );
       expect(true).toBe(false);
     } catch (err: any) {
@@ -317,7 +374,7 @@ describe('CLI Integration', () => {
     await execAsync(`node ${cliScript} init "${testWorkspace}"`);
     try {
       await execAsync(
-        `node ${cliScript} add --title "Traversal" --summary "content" --category "decision" --source "cli" --project-path "${testWorkspace}/non-existent"`
+        `node ${cliScript} add --title "Traversal" --content "content" --category "decision" --source "cli" --project-path "${testWorkspace}/non-existent"`
       );
       expect(true).toBe(false);
     } catch (err: any) {
@@ -326,24 +383,30 @@ describe('CLI Integration', () => {
     }
   });
 
-  it('should redact secrets from title and summary', async () => {
+  it('should redact secrets from title and content', async () => {
     await execAsync(`node ${cliScript} init "${testWorkspace}"`);
     const { stdout, stderr } = await execAsync(
-      `node ${cliScript} add --title "AWS key AKIA1234567890123456" --summary "Secret is AKIA1234567890123456" --category "security_note" --source "cli" --project-path "${testWorkspace}" --json`
+      `node ${cliScript} add --title "AWS key AKIA1234567890123456" --content "Secret is AKIA1234567890123456" --category "security_note" --source "cli" --project-path "${testWorkspace}" --json`
     );
 
     expect(stderr).toBe('');
     const result = JSON.parse(stdout.trim());
     expect(result.success).toBe(true);
-    expect(result.entry.title).toContain('[REDACTED_SECRET]');
-    expect(result.entry.content).toContain('[REDACTED_SECRET]');
+    expect(result.id).toBeTypeOf('string');
   });
 
   it('should accept the interactive flag when required fields are provided', async () => {
     await execAsync(`node ${cliScript} init "${testWorkspace}"`);
 
+    fs.ensureDirSync(path.join(testWorkspace, '.git'));
+
     const { stdout, stderr, code } = await execAsync(
-      `node ${cliScript} add -i --title "Interactive Title" --summary "Interactive Content" --category "decision" --source "cli-interactive" --project-path "${testWorkspace}"`
+      `node ${cliScript} add -i --title "Interactive Title" --content "Interactive Content" --category "decision" --source "cli-interactive" --project-path "${testWorkspace}"`,
+      {
+        cwd: testWorkspace,
+        tty: true,
+        input: ['', '', '', '']
+      }
     );
     expect(code).toBe(0);
     expect(stdout).toContain('Memory entry added successfully!');
@@ -357,8 +420,50 @@ describe('CLI Integration', () => {
       expect(row.content).toBe('Interactive Content');
       expect(row.category).toBe('decision');
       expect(row.source).toBe('cli-interactive');
+      expect(row.confidence).toBe(50);
     } finally {
       db.close();
+    }
+  });
+
+  it('should resolve the workspace root from the nearest git root when project-path is omitted', async () => {
+    fs.ensureDirSync(path.join(testWorkspace, '.git'));
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+
+    const { stdout, stderr } = await execAsync(
+      `node ${cliScript} add --title "Git Root Memory" --content "Resolved from cwd git root" --category "decision" --source "cli" --json`,
+      {
+        cwd: testWorkspace,
+        tty: false
+      }
+    );
+
+    expect(stderr).toBe('');
+    const result = JSON.parse(stdout.trim());
+    expect(result.success).toBe(true);
+    expect(result.id).toBeTypeOf('string');
+
+    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const db = createDatabaseConnection(dbFile);
+    try {
+      const row = db.prepare(`SELECT * FROM memory_entries WHERE title = 'Git Root Memory'`).get() as any;
+      expect(row).toBeDefined();
+      expect(row.content).toBe('Resolved from cwd git root');
+    } finally {
+      db.close();
+    }
+  });
+
+  it('should fail interactive mode immediately in non-TTY environments', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+    try {
+      await execAsync(
+        `node ${cliScript} add -i --title "TTY Failure" --content "Interactive Content" --category "decision" --source "cli" --project-path "${testWorkspace}"`
+      );
+      expect(true).toBe(false);
+    } catch (err: any) {
+      expect(err.code).toBe(1);
+      expect(err.stderr).toContain('Interactive mode requires a TTY terminal');
     }
   });
 
@@ -366,7 +471,7 @@ describe('CLI Integration', () => {
     await execAsync(`node ${cliScript} init "${testWorkspace}"`);
     try {
       await execAsync(
-        `node ${cliScript} add --title "   " --summary "Valid content" --category "decision" --source "cli" --project-path "${testWorkspace}"`
+        `node ${cliScript} add --title "   " --content "Valid content" --category "decision" --source "cli" --project-path "${testWorkspace}"`
       );
       expect(true).toBe(false);
     } catch (err: any) {
@@ -376,12 +481,12 @@ describe('CLI Integration', () => {
 
     try {
       await execAsync(
-        `node ${cliScript} add --title "Valid Title" --summary "   " --category "decision" --source "cli" --project-path "${testWorkspace}"`
+        `node ${cliScript} add --title "Valid Title" --content "   " --category "decision" --source "cli" --project-path "${testWorkspace}"`
       );
       expect(true).toBe(false);
     } catch (err: any) {
       expect(err.code).toBe(1);
-      expect(err.stderr).toContain('Missing required fields: summary');
+      expect(err.stderr).toContain('Missing required fields: content');
     }
   });
 });

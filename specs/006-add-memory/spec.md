@@ -17,11 +17,17 @@
 
 ### Session 2026-05-22
 
+- Q: Which fields are required for `flash-mem add`, and which may be optional or defaulted? → A: Required: `title`, `content`, `category`, `source`. Optional/defaulted: `tags=[]`, `confidence=medium`, `related-files=[]`, `project-path=current repo`.
+- Q: How should list inputs and confidence be passed on the CLI? → A: Use repeated flags for arrays (`--tag`, `--related-file`) and keep `--confidence` as an integer from 0 to 100.
+- Q: What should the JSON success payload look like when `--json` is used? → A: `{"success": true, "id": "<entry-id>"}`.
+- Q: How should `--project-path` be resolved when omitted or given as a relative path? → A: Infer from the nearest Git repository root.
+- Q: What should happen if no Git repository root can be found for `--project-path` resolution? → A: Fall back to the current working directory.
 - Q: Is direct database modification or SQL logic strictly out-of-scope for the CLI command? → A: Yes, DB/SQL is strictly out-of-scope; the CLI must only interact with services/repositories via Dependency Injection.
 - Q: For `flash-mem add -j`, what should the JSON structure on stdout look like when validation fails? → A: `{"success": false, "error": "<error message>", "details": [...]}` on stdout, exit code 1.
 - Q: When a user enters an invalid value in interactive mode, does the CLI retry at the prompt level or form level? → A: Prompt-level retry: show the validation error for that field immediately, and re-prompt for that specific field until valid or cancelled.
 - Q: If a user runs `flash-mem add -i` in a non-interactive shell (stdin is not a TTY), how should the CLI behave? → A: Fail immediately with an error (e.g., "Interactive mode requires a TTY terminal") and exit code 1.
 - Q: What is the exact order of interactive prompts when prompting for fields? → A: Title -> Content -> Category -> Source -> Tags -> Confidence -> Related Files -> Project Path.
+- Q: When `--confidence` is not explicitly provided, what is the default value? → A: Default confidence is 50 (representing "medium"). This is a numeric value that will be persisted in the database.
 
 ---
 
@@ -66,7 +72,7 @@ As a developer who redirects CLI stdout to a file or a script pipe, I want all i
 
 - **Missing Options in Non-Interactive Mode**: Executing the command without options must result in usage text to `stderr` and non-zero exit.
 - **Interactive Session Interruption**: If the user presses Ctrl+C or exits the prompt session mid-way, the CLI must exit cleanly, close the readline interface stream to prevent hanging processes, and not write any partial or invalid data to the database.
-- **Invalid Values Entered via Prompts**: If the user inputs an invalid field (e.g., a category not in the canonical list or a confidence level out of bounds), the CLI must show the validation error on `stderr` immediately and re-prompt specifically for that field (prompt-level retry) until a valid input is given or the session is cancelled.
+- **Invalid Values Entered via Prompts**: If the user inputs an invalid field (e.g., a category not in the canonical list, a confidence value outside 0 to 100, or a non-numeric confidence value), the CLI must show the validation error on `stderr` immediately and re-prompt specifically for that field (prompt-level retry) until a valid input is given or the session is cancelled.
 - **Interactive Mode in Non-TTY Environments**: If the CLI is run in interactive mode (`-i` or `--interactive`) but the standard input is not a terminal TTY, the CLI must fail immediately, print an error message (e.g., "Interactive mode requires a TTY terminal") to `stderr`, and exit with code 1.
 
 ---
@@ -76,12 +82,12 @@ As a developer who redirects CLI stdout to a file or a script pipe, I want all i
 ### Functional Requirements
 
 - **FR-001**: The system MUST expose the add-memory capability via a CLI command `flash-mem add`.
-- **FR-002**: The CLI command MUST accept core options: `--title`, `--content`, `--category`, `--source`, `--tags`, `--confidence`, `--related-files`, `--project-path`.
+- **FR-002**: The CLI command MUST accept core options: `--title`, `--content`, `--category`, `--source`, `--tag`, `--related-file`, `--confidence`, and `--project-path`. Of these, `--title`, `--content`, `--category`, and `--source` are required; `--tag` and `--related-file` MAY be repeated to supply arrays; `--confidence` MUST be an integer from 0 to 100; `--project-path` is optional and, when omitted, MUST resolve to the nearest Git repository root from the current working directory, or fall back to the current working directory if no Git root exists.
 - **FR-003**: The CLI command MUST support an `--interactive` (or `-i`) flag.
 - **FR-004**: If required options are missing and the `--interactive` flag is NOT set, the CLI MUST print a validation error to `stderr` and exit with a non-zero status code (exit code 1).
-- **FR-005**: If the `--interactive` flag is set, the CLI MUST prompt the user for any missing required options via an interactive readline interface. The exact order of interactive prompts is: Title -> Content -> Category -> Source -> Tags -> Confidence -> Related Files -> Project Path.
+- **FR-005**: If the `--interactive` flag is set, the CLI MUST prompt the user for any missing required options via an interactive readline interface. The exact order of interactive prompts is: Title -> Content -> Category -> Source -> Tags -> Confidence -> Related Files -> Project Path, while collecting repeated `--tag` and `--related-file` values as arrays and validating `--confidence` as an integer between 0 and 100.
 - **FR-006**: The CLI command MUST write all interactive prompts, validation errors, and user-facing guidelines strictly to `process.stderr`.
-- **FR-007**: The CLI command MUST support a `--json` (or `-j`) flag. When provided, the CLI MUST output a single structured JSON object on `process.stdout` representing either the successful creation payload (containing the new entry `id`) or the validation failure payload (formatted as `{"success": false, "error": "<error message>", "details": [...]}`), and MUST NOT output any plain text to `stdout`.
+- **FR-007**: The CLI command MUST support a `--json` (or `-j`) flag. When provided, the CLI MUST output a single structured JSON object on `process.stdout` representing either `{"success": true, "id": "<entry-id>"}` on success or the validation failure payload `{"success": false, "error": "<error message>", "details": [...]}`, and MUST NOT output any plain text to `stdout`.
 - **FR-008**: The CLI command MUST delegate memory validation, secret redaction, path traversal checks, and persistence to the core application service, ensuring it inherits all canonical validation rules specified in Feature 005. Direct database access or SQL execution by the CLI command handler is strictly out of scope.
 
 ### Key Entities
