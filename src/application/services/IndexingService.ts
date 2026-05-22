@@ -6,7 +6,7 @@ import {
 } from '../../domain/repositories/interfaces';
 import { MemoryEntryService } from './MemoryEntryService';
 import { SchemaMigrationService } from './SchemaMigrationService';
-import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
+import { IndexingInputGuard, SafetyWarning } from '../../infrastructure/safety/IndexingInputGuard';
 
 export interface IndexSourceInput {
   path: string;
@@ -18,6 +18,11 @@ export interface IndexSourceInput {
   confidence?: number;
   relatedFiles?: string[];
   tags?: string[];
+}
+
+export interface IndexingResult {
+  results: Array<{ doc: any; entry: any }>;
+  warnings: SafetyWarning[];
 }
 
 export class IndexingService {
@@ -40,9 +45,9 @@ export class IndexingService {
     this.indexingRunRepository.finishRun(runId, status, entryCount, errorMessage);
   }
 
-  public indexSources(projectId: string, sources: IndexSourceInput[]) {
+  public indexSources(projectId: string, sources: IndexSourceInput[]): IndexingResult {
     const project = this.resolveProject(projectId);
-    const sanitizedSources = this.indexingInputGuard.sanitizeSources(project.rootPath, sources);
+    const { sources: sanitizedSources, warnings } = this.indexingInputGuard.sanitizeSources(project.rootPath, sources);
     const run = this.indexingRunRepository.createRun(project.id, this.schemaMigrationService.ensureCurrentSchema(), sanitizedSources.length);
 
     try {
@@ -69,16 +74,16 @@ export class IndexingService {
       });
 
       this.finishRun(run.id, 'success', results.length);
-      return results;
+      return { results, warnings };
     } catch (error: any) {
       this.finishRun(run.id, 'failed', 0, error?.message ?? 'Indexing failed');
       throw error;
     }
   }
 
-  public rebuildIndex(projectId: string, sources: IndexSourceInput[]) {
+  public rebuildIndex(projectId: string, sources: IndexSourceInput[]): IndexingResult {
     const project = this.resolveProject(projectId);
-    const sanitizedSources = this.indexingInputGuard.sanitizeSources(project.rootPath, sources);
+    const { sources: sanitizedSources, warnings } = this.indexingInputGuard.sanitizeSources(project.rootPath, sources);
     const run = this.indexingRunRepository.createRun(project.id, this.schemaMigrationService.ensureCurrentSchema(), sanitizedSources.length);
 
     try {
@@ -108,7 +113,7 @@ export class IndexingService {
       });
 
       this.finishRun(run.id, 'success', results.length);
-      return results;
+      return { results, warnings };
     } catch (error: any) {
       this.finishRun(run.id, 'failed', 0, error?.message ?? 'Index rebuild failed');
       throw error;

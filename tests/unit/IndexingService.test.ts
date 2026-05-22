@@ -78,8 +78,8 @@ describe('IndexingService', () => {
     const firstRun = service.indexSources(project.id, sources);
     const secondRun = service.indexSources(project.id, sources);
 
-    expect(firstRun.length).toBe(1);
-    expect(secondRun.length).toBe(1);
+    expect(firstRun.results.length).toBe(1);
+    expect(secondRun.results.length).toBe(1);
     expect(search.search({ projectId: project.id, query: 'sqlite' }).results.length).toBe(1);
   });
 
@@ -108,7 +108,8 @@ describe('IndexingService', () => {
     ];
 
     const result = service.indexSources(project.id, sources);
-    expect(result.length).toBe(1);
+    expect(result.results.length).toBe(1);
+    expect(result.warnings.length).toBeGreaterThanOrEqual(1);
 
     const matches = search.search({ projectId: project.id, query: 'REDACTED_SECRET', includeContent: true }).results;
     expect(matches).toHaveLength(1);

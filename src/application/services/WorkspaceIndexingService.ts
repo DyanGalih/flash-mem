@@ -4,12 +4,13 @@ import { createHash } from 'node:crypto';
 import { IndexingService, IndexSourceInput } from './IndexingService';
 import { IProjectRepository } from '../../domain/repositories/interfaces';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
-import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
+import { IndexingInputGuard, SafetyWarning } from '../../infrastructure/safety/IndexingInputGuard';
 
 export interface WorkspaceRebuildResult {
   entryCount: number;
   sourceCount: number;
   sources: string[];
+  warnings: SafetyWarning[];
 }
 
 export class WorkspaceIndexingService {
@@ -28,12 +29,13 @@ export class WorkspaceIndexingService {
 
     const sources = this.collectMarkdownSources(resolvedRoot);
     const projectId = this.ensureProject(resolvedRoot);
-    const results = this.indexingService.rebuildIndex(projectId, sources);
+    const { results, warnings } = this.indexingService.rebuildIndex(projectId, sources);
 
     return {
       entryCount: results.length,
       sourceCount: sources.length,
-      sources: sources.map((source) => source.path)
+      sources: sources.map((source) => source.path),
+      warnings
     };
   }
 

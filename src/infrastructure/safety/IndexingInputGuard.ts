@@ -1,7 +1,7 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { PathSanitizer } from './PathSanitizer';
-import { SecretScanner } from './SecretScanner';
+import { SecretScanner, SecretScanWarning } from './SecretScanner';
 
 export interface IndexingSourceInput {
   path: string;
@@ -22,13 +22,25 @@ export interface SanitizedIndexingSourceInput extends IndexingSourceInput {
   tags?: string[];
 }
 
+export interface SafetyWarning {
+  filePath: string;
+  line: number;
+  category: string;
+}
+
+export interface SanitizationResult {
+  sources: SanitizedIndexingSourceInput[];
+  warnings: SafetyWarning[];
+}
+
 export class IndexingInputGuard {
   private readonly ignorePatternCache = new Map<string, string[]>();
 
-  public sanitizeSources(projectRoot: string, sources: IndexingSourceInput[]): SanitizedIndexingSourceInput[] {
+  public sanitizeSources(projectRoot: string, sources: IndexingSourceInput[]): SanitizationResult {
     const resolvedRoot = PathSanitizer.resolveRoot(projectRoot);
     const ignorePatterns = this.loadIgnorePatterns(resolvedRoot);
     const sanitized: SanitizedIndexingSourceInput[] = [];
+    const warnings: SafetyWarning[] = [];
 
     for (const source of sources) {
       const absolutePath = this.resolveSourcePath(resolvedRoot, source.path);
@@ -36,6 +48,52 @@ export class IndexingInputGuard {
 
       if (this.shouldIgnore(relativePath, ignorePatterns)) {
         continue;
+      }
+
+      // Compile safety warnings for title
+      try {
+        const titleWarnings = SecretScanner.scanForSecrets(source.title);
+        for (const w of titleWarnings) {
+          warnings.push({
+            filePath: relativePath,
+            line: w.line,
+            category: w.category
+          });
+        }
+      } catch (err) {
+        // Handle potential scan errors (e.g. size exceeded)
+      }
+
+      // Compile safety warnings for content
+      try {
+        const contentWarnings = SecretScanner.scanForSecrets(source.content);
+        for (const w of contentWarnings) {
+          warnings.push({
+            filePath: relativePath,
+            line: w.line,
+            category: w.category
+          });
+        }
+      } catch (err) {
+        // Handle potential scan errors
+      }
+
+      // Compile safety warnings for tags
+      if (source.tags) {
+        for (const tag of source.tags) {
+          try {
+            const tagWarnings = SecretScanner.scanForSecrets(tag);
+            for (const w of tagWarnings) {
+              warnings.push({
+                filePath: relativePath,
+                line: w.line,
+                category: w.category
+              });
+            }
+          } catch (err) {
+            // Handle potential scan errors
+          }
+        }
       }
 
       sanitized.push({
@@ -47,7 +105,10 @@ export class IndexingInputGuard {
       });
     }
 
-    return sanitized;
+    return {
+      sources: sanitized,
+      warnings
+    };
   }
 
   public normalizeSourcePath(projectRoot: string, sourcePath: string): string {
@@ -82,16 +143,27 @@ export class IndexingInputGuard {
       return cached;
     }
 
+    const patterns: string[] = [];
+
+    // Load from .gitignore
     const gitignorePath = path.join(resolvedRoot, '.gitignore');
-    if (!fs.existsSync(gitignorePath)) {
-      this.ignorePatternCache.set(resolvedRoot, []);
-      return [];
+    if (fs.existsSync(gitignorePath)) {
+      const gitignorePatterns = fs.readFileSync(gitignorePath, 'utf-8')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.startsWith('#') && !line.startsWith('!'));
+      patterns.push(...gitignorePatterns);
     }
 
-    const patterns = fs.readFileSync(gitignorePath, 'utf-8')
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line.length > 0 && !line.startsWith('#') && !line.startsWith('!'));
+    // Load from .flash-mem-ignore
+    const flashmemIgnorePath = path.join(resolvedRoot, '.flash-mem-ignore');
+    if (fs.existsSync(flashmemIgnorePath)) {
+      const flashmemPatterns = fs.readFileSync(flashmemIgnorePath, 'utf-8')
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0 && !line.startsWith('#') && !line.startsWith('!'));
+      patterns.push(...flashmemPatterns);
+    }
 
     this.ignorePatternCache.set(resolvedRoot, patterns);
     return patterns;

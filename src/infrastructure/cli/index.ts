@@ -379,17 +379,25 @@ program
           transactionRunner
         );
 
-        const results = indexingService.rebuildIndex(project.id, sources);
+        const { results: rebuildResults, warnings } = indexingService.rebuildIndex(project.id, sources);
+
+        if (!useJson && warnings && warnings.length > 0) {
+          await writeStderr('Safety warnings detected during indexing:\n');
+          for (const warning of warnings) {
+            await writeStderr(`  - ${warning.filePath}:${warning.line} - ${warning.category}\n`);
+          }
+        }
 
         if (useJson) {
           await writeStdout(JSON.stringify({
             success: true,
             rebuilt: true,
-            entryCount: results.length,
-            sourcesIndexed: sources.map(s => s.path)
+            entryCount: rebuildResults.length,
+            sourcesIndexed: sources.map(s => s.path),
+            warnings
           }, null, 2) + '\n');
         } else {
-          await writeStdout(`Index rebuilt successfully! Transactionally processed ${results.length} entries from ${sources.length} markdown source files.\n`);
+          await writeStdout(`Index rebuilt successfully! Transactionally processed ${rebuildResults.length} entries from ${sources.length} markdown source files.\n`);
         }
 
         process.exitCode = 0;
@@ -773,6 +781,12 @@ program
         );
 
         const result = service.restore(backupDirectory, workspaceRoot);
+
+        if (result.warnings && result.warnings.length > 0) {
+          for (const warning of result.warnings) {
+            await writeStderr(`Warning: ${warning}\n`);
+          }
+        }
 
         if (useJson) {
           await writeStdout(JSON.stringify({

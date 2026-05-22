@@ -17,7 +17,11 @@ export class ExportSafetyGuard {
 
   public resolveExportFilePath(workspaceRoot: string, fileName: string): string {
     const exportRoot = this.resolveExportRoot(workspaceRoot);
-    return PathSanitizer.sanitizeSubPath(exportRoot, fileName);
+    const resolvedFilePath = PathSanitizer.sanitizeSubPath(exportRoot, fileName);
+    if (!PathSanitizer.isWithinRoot(exportRoot, resolvedFilePath)) {
+      throw new Error(`Directory traversal detected: Export file "${fileName}" escapes the export directory "${exportRoot}"`);
+    }
+    return resolvedFilePath;
   }
 
   public redactSensitiveValues(value: string): string {

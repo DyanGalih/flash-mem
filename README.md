@@ -117,7 +117,55 @@ Start the local MCP server over stdio to integrate with AI interfaces (such as C
 flash-mem mcp [path]
 ```
 
-## Security Features
+## Security & Safety Features
 
-* **Path Traversal Guard**: Prevents access to files or directories outside the specified workspace root.
-* **Secret Scanner**: Automatically redacts high-entropy credentials (AWS keys, GitHub tokens, database URIs, etc.) from `title` and `content` fields before persistence.
+### 1. Source Path Isolation & Traversal Protection
+* **Path Traversal Guard**: All input and output paths are strictly validated against the workspace root boundaries using path resolution checks (`PathSanitizer.resolveRoot` and `PathSanitizer.isWithinRoot`). Attempting directory traversals (e.g. `../outside.md` or absolute paths outside the root) will throw a validation error.
+
+### 2. Ignored Files & Folders (`.flash-mem-ignore`)
+To prevent indexing or storing files containing sensitive information:
+* **Default Ignored Paths**: The system automatically ignores `.env`, `.env.*`, `.git/credentials`, `.npmrc`, and `.netrc`.
+* **Custom Ignored Paths**: Developers can create a `.flash-mem-ignore` file (and/or use `.gitignore`) in the workspace root to define custom glob patterns.
+
+**Example `.flash-mem-ignore`:**
+```text
+# Exclude temporary workspace files
+temp/
+*.log
+*.key
+```
+
+### 3. In-Place Secret Scanner & Redaction
+Any indexed content is scanned for high-entropy credentials. If a match is found, it is replaced in-place with `[REDACTED_SECRET]` before being persisted or exported.
+Supported patterns include:
+* **Private Keys**: `-----BEGIN * PRIVATE KEY----- ...`
+* **AWS Access Keys**: `AKIA...` (16 uppercase alphanumeric characters)
+* **GitHub Tokens**: `ghp_...`, `gho_...`, `ghu_...`, etc.
+* **Slack Tokens**: `xoxb-...`, `xoxa-...`, etc.
+* **Database Connection URIs**: URIs prefixing `mongodb://`, `postgresql://`, `mysql://`, `redis://`, `sqlite://`, etc.
+* **Generic Credentials**: Identifiers like `api_key`, `token`, `secret`, or `password` followed by `:` or `=`.
+
+### 4. Telemetry & Safety Warnings
+When secrets are detected, the system generates non-sensitive telemetry warning metadata. These warnings never leak the actual secret values.
+
+#### MCP Tool Call & CLI JSON Output Format
+In MCP JSON-RPC responses and CLI commands run with `--json`, safety warnings are returned as an array under `warnings`:
+```json
+{
+  "success": true,
+  "warnings": [
+    {
+      "filePath": "docs/db.md",
+      "line": 1,
+      "category": "Database Connection URI"
+    }
+  ]
+}
+```
+
+#### CLI Plain Text Output Format
+For CLI commands, if warnings are present and `--json` is not specified, a summary block is output directly to `stderr`:
+```text
+Safety warnings detected during indexing:
+  - docs/db.md:1 - Database Connection URI
+```

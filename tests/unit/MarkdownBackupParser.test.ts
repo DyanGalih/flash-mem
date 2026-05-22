@@ -235,7 +235,7 @@ describe('MarkdownBackupParser', () => {
   });
 
   describe('security — secret redaction', () => {
-    it('redacts secrets from entry content', () => {
+    it('redacts secrets from entry content and adds warning', () => {
       const sensitiveContent = 'Token: ghp_1234567890abcdefghij12345678';
       const md = buildSectionFile([{
         id: 'sec-1',
@@ -246,9 +246,10 @@ describe('MarkdownBackupParser', () => {
       const result = parser.parse(md, 'test.md');
       expect(result.entries[0].content).toBe(SecretScanner.redact(sensitiveContent));
       expect(result.entries[0].content).not.toContain('ghp_');
+      expect(result.warnings.some((w) => w.includes('GitHub Token') && w.includes('content'))).toBe(true);
     });
 
-    it('redacts secrets from entry title', () => {
+    it('redacts secrets from entry title and adds warning', () => {
       const sensitiveTitle = 'My API token: AKIAIOSFODNN7EXAMPLE123';
       const md = buildSectionFile([{
         id: 'sec-2',
@@ -258,6 +259,20 @@ describe('MarkdownBackupParser', () => {
 
       const result = parser.parse(md, 'test.md');
       expect(result.entries[0].title).not.toContain('AKIA');
+      expect(result.warnings.some((w) => w.includes('Generic Credential') && w.includes('title'))).toBe(true);
+    });
+
+    it('redacts secrets from entry tag and adds warning', () => {
+      const md = buildSectionFile([{
+        id: 'sec-3',
+        title: 'Normal Title',
+        tags: ['ghp_1234567890abcdefghij12345678'],
+        content: 'Normal content.'
+      }]);
+
+      const result = parser.parse(md, 'test.md');
+      expect(result.entries[0].tags[0]).toContain('[REDACTED_SECRET]');
+      expect(result.warnings.some((w) => w.includes('GitHub Token') && w.includes('tag'))).toBe(true);
     });
   });
 

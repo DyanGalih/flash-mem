@@ -29,4 +29,9 @@ describe('ExportSafetyGuard', () => {
   it('rejects traversal-like export file names', () => {
     expect(() => guard.sanitizeFileName('../escape.md')).toThrow('Invalid export file name');
   });
+
+  it('detects and rejects traversal inside resolveExportFilePath', () => {
+    expect(() => guard.resolveExportFilePath(workspaceRoot, '../outside.md')).toThrow('Directory traversal detected');
+    expect(() => guard.resolveExportFilePath(workspaceRoot, '/absolute/path/outside.md')).toThrow('Directory traversal detected');
+  });
 });

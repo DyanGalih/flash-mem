@@ -333,16 +333,43 @@ export class MarkdownBackupParser {
       return null;
     }
 
-    // Apply secret redaction on title and content (D3 — SecretScanner must be used)
+    // Scan for secrets and accumulate warnings (T013)
+    try {
+      const titleWarnings = SecretScanner.scanForSecrets(title);
+      for (const w of titleWarnings) {
+        warnings.push(`${filename}: [Safety] ${w.category} detected in entry title.`);
+      }
+    } catch (err) {}
+
+    try {
+      const contentWarnings = SecretScanner.scanForSecrets(rawContent);
+      for (const w of contentWarnings) {
+        warnings.push(`${filename}: [Safety] ${w.category} detected in entry content at line ${w.line}.`);
+      }
+    } catch (err) {}
+
+    if (tags) {
+      for (const tag of tags) {
+        try {
+          const tagWarnings = SecretScanner.scanForSecrets(tag);
+          for (const w of tagWarnings) {
+            warnings.push(`${filename}: [Safety] ${w.category} detected in entry tag.`);
+          }
+        } catch (err) {}
+      }
+    }
+
+    // Apply secret redaction on title, content, and tags (D3 — SecretScanner must be used)
     const safeTitle = SecretScanner.redact(title);
     const safeContent = SecretScanner.redact(rawContent);
+    const safeTags = tags.map((tag) => SecretScanner.redact(tag));
 
     return {
       id,
       title: safeTitle,
       content: safeContent,
       category: category ?? 'project',
-      tags,
+      tags: safeTags,
       updatedAt: updatedAt ?? Date.now(),
       sourceDocumentPath,
       relationships

@@ -71,7 +71,7 @@ describe('Memory Store Integration', () => {
 
     expect(search.search({ projectId: project.id, query: 'memory' }).results[0].id).toBe(created?.id);
 
-    const results = indexing.indexSources(project.id, [{
+    const { results } = indexing.indexSources(project.id, [{
       path: 'docs/memory/overview.md',
       checksum: 'checksum-1',
       title: 'Overview',

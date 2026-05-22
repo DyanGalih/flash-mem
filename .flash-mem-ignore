@@ -1,0 +1,5 @@
+# Custom ignore patterns for flash-mem
+# Add glob patterns here to exclude files and folders from indexing.
+# Example:
+# temp-files/
+# *.tmp
