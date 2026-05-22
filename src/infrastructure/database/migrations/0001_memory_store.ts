@@ -22,6 +22,21 @@ export function initializeMemoryStoreSchema(db: Database.Database): void {
     `).run();
 
     db.prepare(`
+      CREATE TABLE IF NOT EXISTS project_summaries (
+        project_id TEXT PRIMARY KEY,
+        project_name TEXT NOT NULL,
+        purpose TEXT NOT NULL,
+        tech_stack TEXT NOT NULL,
+        architecture_style TEXT NOT NULL,
+        important_conventions TEXT NOT NULL,
+        known_constraints TEXT NOT NULL,
+        security_sensitive_areas TEXT NOT NULL,
+        last_updated_at INTEGER NOT NULL,
+        FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+      )
+    `).run();
+
+    db.prepare(`
       CREATE TABLE IF NOT EXISTS memory_entries (
         id TEXT PRIMARY KEY,
         project_id TEXT NOT NULL,
@@ -199,6 +214,7 @@ export function initializeMemoryStoreSchema(db: Database.Database): void {
 export function isMemoryStoreInitialized(db: Database.Database): boolean {
   const requiredTables = [
     'projects',
+    'project_summaries',
     'memory_entries',
     'tags',
     'memory_entry_tags',

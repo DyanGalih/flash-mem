@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as readline from 'node:readline';
 import Database from 'better-sqlite3';
 import { Server } from '@modelcontextprotocol/sdk';
@@ -10,6 +11,7 @@ import { RelevantContextService } from '../application/services/RelevantContextS
 import { SchemaMigrationService } from '../application/services/SchemaMigrationService';
 import { WorkspaceIndexingService } from '../application/services/WorkspaceIndexingService';
 import { ProjectRepository } from '../infrastructure/database/repositories/ProjectRepository';
+import { ProjectSummaryRepository } from '../infrastructure/database/repositories/ProjectSummaryRepository';
 import { SourceDocumentRepository } from '../infrastructure/database/repositories/SourceDocumentRepository';
 import { IndexingRunRepository } from '../infrastructure/database/repositories/IndexingRunRepository';
 import { MemoryEntryRepository } from '../infrastructure/database/repositories/MemoryEntryRepository';
@@ -21,6 +23,7 @@ import { createUpdateMemoryTool } from './tools/update-memory';
 import { createDeleteMemoryTool } from './tools/delete-memory';
 import { createExportMarkdownTool } from './tools/export-markdown';
 import { createGetProjectSummaryTool } from './tools/get-project-summary';
+import { createUpdateProjectSummaryTool } from './tools/update-project-summary';
 import { createGetRelevantContextTool } from './tools/get-relevant-context';
 import { createMemoryEntryTool, updateMemoryEntryTool } from './tools/memory-entry';
 import { createMemorySearchTool } from './tools/memory-search';
@@ -31,11 +34,15 @@ import { createIndexingTool } from './tools/indexing';
 
 export interface McpServerContext {
   db: Database.Database;
+  workspaceRoot: string;
+  summaryWriteAccessEnabled?: boolean;
 }
 
 export function createMcpServer(context: McpServerContext) {
   const projectRepository = new ProjectRepository(context.db);
+  const workspaceProject = projectRepository.upsertByRootPath(context.workspaceRoot, path.basename(context.workspaceRoot));
   const memoryEntryRepository = new MemoryEntryRepository(context.db);
+  const projectSummaryRepository = new ProjectSummaryRepository(context.db);
   const tagRepository = new TagRepository(context.db);
   const relationshipRepository = new RelationshipRepository(context.db);
   const sourceDocumentRepository = new SourceDocumentRepository(context.db);
@@ -70,14 +77,12 @@ export function createMcpServer(context: McpServerContext) {
     schemaMigrationService
   );
   const projectSummaryService = new ProjectSummaryService(
+    workspaceProject.id,
     projectRepository,
-    memoryEntryRepository,
-    tagRepository,
-    relationshipRepository,
-    sourceDocumentRepository
+    projectSummaryRepository
   );
   const relevantContextService = new RelevantContextService(
-    projectSummaryService,
+    projectRepository,
     memorySearchService
   );
   const workspaceIndexingService = new WorkspaceIndexingService(
@@ -92,6 +97,9 @@ export function createMcpServer(context: McpServerContext) {
 
   server
     .registerTool(createGetProjectSummaryTool(projectSummaryService))
+    .registerTool(createUpdateProjectSummaryTool(projectSummaryService, {
+      canWriteProjectSummary: context.summaryWriteAccessEnabled === true
+    }))
     .registerTool(createSearchMemoryTool(memorySearchService))
     .registerTool(createGetRelevantContextTool(relevantContextService))
     .registerTool(createAddMemoryTool(memoryEntryService))
