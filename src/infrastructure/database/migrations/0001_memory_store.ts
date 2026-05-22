@@ -31,6 +31,7 @@ export function initializeMemoryStoreSchema(db: Database.Database): void {
         category TEXT NOT NULL,
         source TEXT NOT NULL,
         confidence INTEGER,
+        summary TEXT,
         related_files TEXT,
         source_document_id TEXT,
         created_at INTEGER NOT NULL,
@@ -56,6 +57,9 @@ export function initializeMemoryStoreSchema(db: Database.Database): void {
     }
     if (!columnNames.includes('related_files')) {
       db.prepare("ALTER TABLE memory_entries ADD COLUMN related_files TEXT").run();
+    }
+    if (!columnNames.includes('summary')) {
+      db.prepare("ALTER TABLE memory_entries ADD COLUMN summary TEXT").run();
     }
 
     db.prepare(`

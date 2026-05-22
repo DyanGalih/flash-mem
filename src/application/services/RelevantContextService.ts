@@ -24,7 +24,12 @@ export class RelevantContextService {
 
   public getRelevantContext(projectId: string, query: string, limit = 5): RelevantContextResult {
     const summary = this.projectSummaryService.getProjectSummary(projectId);
-    const matches = this.memorySearchService.search(projectId, query, limit).map((match) => ({
+    const matches = this.memorySearchService.search({
+      projectId,
+      query,
+      limit,
+      includeContent: true
+    }).results.map((match) => ({
       id: match.id,
       title: match.title,
       content: match.content,

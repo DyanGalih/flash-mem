@@ -16,6 +16,18 @@ export interface IProjectRepository {
   clearProjectData(projectId: string): void;
 }
 
+export interface MemorySearchOptions {
+  query?: string;
+  category?: string;
+  tags?: string[];
+  tagOperator?: 'AND' | 'OR';
+  projectId?: string | null; // null/empty means cross-project
+  minConfidence?: number | null;
+  source?: string | null;
+  includeContent?: boolean;
+  limit?: number;
+}
+
 export interface IMemoryEntryRepository {
   findById(entryId: string): MemoryEntry | null;
   listByProject(projectId: string): MemoryEntry[];
@@ -31,16 +43,19 @@ export interface IMemoryEntryRepository {
       source: string;
       confidence: number | null;
       relatedFiles: string[] | null;
+      summary: string | null;
     }>
   ): MemoryEntry | null;
   softDelete(entryId: string): boolean;
-  search(projectId: string, query: string, limit?: number): Array<MemoryEntry & { tags: string[]; relationships: Relationship[]; score: number }>;
+  search(options: MemorySearchOptions): Array<MemoryEntry & { tags: string[]; relationships: Relationship[]; score: number }>;
   findByProjectAndHash(projectId: string, contentHash: string, category: string): MemoryEntry | null;
+  listAllCategories(projectId?: string): string[];
 }
 
 export interface ITagRepository {
   listForEntry(entryId: string): Tag[];
   replaceEntryTags(entryId: string, tagNames: string[]): Tag[];
+  listAllTags(projectId?: string): string[];
 }
 
 export interface IRelationshipRepository {

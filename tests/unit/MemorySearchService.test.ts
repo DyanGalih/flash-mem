@@ -40,7 +40,7 @@ describe('MemorySearchService', () => {
       transactionRunner
     );
 
-    searchService = new MemorySearchService(memoryEntryRepo);
+    searchService = new MemorySearchService(memoryEntryRepo, tagRepo, projectRepo);
   });
 
   afterEach(() => {
@@ -62,13 +62,58 @@ describe('MemorySearchService', () => {
       tags: ['sqlite', 'memory']
     });
 
-    const results = searchService.search(project.id, 'sqlite');
+    const { results } = searchService.search({ projectId: project.id, query: 'sqlite' });
     expect(results.length).toBe(1);
     expect(results[0].title).toBe('SQLite memory store');
     expect(results[0].tags).toContain('sqlite');
   });
 
-  it('returns an empty array for blank search input', () => {
-    expect(searchService.search('project-id', '   ')).toEqual([]);
+  it('rejects invalid category filter', () => {
+    const project = projectRepo.upsertByRootPath(path.dirname(testDbFile), 'memory-search-workspace');
+    expect(() => {
+      searchService.search({ projectId: project.id, category: 'invalid_category_name' });
+    }).toThrow(/Invalid category/);
+  });
+
+  it('rejects invalid confidence score bounds', () => {
+    const project = projectRepo.upsertByRootPath(path.dirname(testDbFile), 'memory-search-workspace');
+    expect(() => {
+      searchService.search({ projectId: project.id, minConfidence: 150 });
+    }).toThrow(/Confidence score must be between 0 and 100/);
+
+    expect(() => {
+      searchService.search({ projectId: project.id, minConfidence: -10 });
+    }).toThrow(/Confidence score must be between 0 and 100/);
+  });
+
+  it('rejects empty query when no filters are present', () => {
+    expect(() => {
+      searchService.search({ query: '   ' });
+    }).toThrow(/Please provide a search query or at least one filter/);
+  });
+
+  it('suggests tags and categories on zero results', () => {
+    const project = projectRepo.upsertByRootPath(path.dirname(testDbFile), 'memory-search-workspace');
+    entryService.createMemoryEntry({
+      projectId: project.id,
+      title: 'SQLite memory store',
+      content: 'Store engineering knowledge in SQLite',
+      category: 'project',
+      source: 'test',
+      tags: ['sqlite', 'memory']
+    });
+
+    const response = searchService.search({ projectId: project.id, query: 'nonexistentkeyword' });
+    expect(response.results.length).toBe(0);
+    expect(response.suggestions).toBeDefined();
+    expect(response.suggestions?.categories).toContain('project');
+    expect(response.suggestions?.tags).toContain('sqlite');
+  });
+
+  it('prevents path traversal in source filter', () => {
+    const project = projectRepo.upsertByRootPath(path.dirname(testDbFile), 'memory-search-workspace');
+    expect(() => {
+      searchService.search({ projectId: project.id, source: '../../outside.txt' });
+    }).toThrow(/Directory traversal detected/);
   });
 });

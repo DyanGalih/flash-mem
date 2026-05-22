@@ -62,7 +62,7 @@ export class IndexingService {
             relationships: [],
             sourceDocumentPath: source.path,
             sourceChecksum: source.checksum
-          });
+          }, { transactional: false });
           processed.push({ doc, entry });
         }
         return processed;
@@ -101,7 +101,7 @@ export class IndexingService {
             relationships: [],
             sourceDocumentPath: source.path,
             sourceChecksum: source.checksum
-          });
+          }, { transactional: false });
           processed.push({ doc, entry });
         }
         return processed;

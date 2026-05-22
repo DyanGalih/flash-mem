@@ -80,7 +80,7 @@ describe('IndexingService', () => {
 
     expect(firstRun.length).toBe(1);
     expect(secondRun.length).toBe(1);
-    expect(search.search(project.id, 'sqlite').length).toBe(1);
+    expect(search.search({ projectId: project.id, query: 'sqlite' }).results.length).toBe(1);
   });
 
   it('redacts secrets and ignores excluded source files during indexing', () => {
@@ -110,7 +110,7 @@ describe('IndexingService', () => {
     const result = service.indexSources(project.id, sources);
     expect(result.length).toBe(1);
 
-    const matches = search.search(project.id, 'REDACTED_SECRET');
+    const matches = search.search({ projectId: project.id, query: 'REDACTED_SECRET', includeContent: true }).results;
     expect(matches).toHaveLength(1);
     expect(matches[0].content).toContain('[REDACTED_SECRET]');
     expect(matches[0].title).toBe('API key inventory');
@@ -131,7 +131,7 @@ describe('IndexingService', () => {
       }
     ]);
 
-    expect(search.search(project.id, 'First').length).toBe(1);
+    expect(search.search({ projectId: project.id, query: 'First' }).results.length).toBe(1);
 
     // Rebuild index with different sources
     service.rebuildIndex(project.id, [
@@ -146,7 +146,7 @@ describe('IndexingService', () => {
     ]);
 
     // The old file should be gone, and the new file should be indexed
-    expect(search.search(project.id, 'First').length).toBe(0);
-    expect(search.search(project.id, 'Second').length).toBe(1);
+    expect(search.search({ projectId: project.id, query: 'First' }).results.length).toBe(0);
+    expect(search.search({ projectId: project.id, query: 'Second' }).results.length).toBe(1);
   });
 });

@@ -30,7 +30,10 @@ export class MemoryEntryService {
     this.indexingInputGuard = new IndexingInputGuard();
   }
 
-  public createMemoryEntry(input: MemoryEntryInput & { projectId?: string; rootPath?: string; projectName?: string }) {
+  public createMemoryEntry(
+    input: MemoryEntryInput & { projectId?: string; rootPath?: string; projectName?: string },
+    options: { transactional?: boolean } = {}
+  ) {
     const project = this.resolveProject(input);
 
     if (input.relatedFiles) {
@@ -45,8 +48,11 @@ export class MemoryEntryService {
 
     const redactedTitle = SecretScanner.redact(input.title);
     const redactedContent = SecretScanner.redact(input.content);
+    const summaryVal = input.summary !== undefined && input.summary !== null
+      ? SecretScanner.redact(input.summary)
+      : MemoryEntryService.extractSummary(redactedContent);
 
-    return this.transactionRunner.run(() => {
+    const work = () => {
       const sourceDocumentId = this.resolveSourceDocumentId(project, input);
       const entry = this.memoryEntryRepository.create({
         projectId: project.id,
@@ -55,6 +61,7 @@ export class MemoryEntryService {
         category: input.category,
         source: input.source,
         confidence: input.confidence,
+        summary: summaryVal,
         relatedFiles: input.relatedFiles,
         tags: input.tags ?? [],
         sourceDocumentPath: input.sourceDocumentPath,
@@ -68,7 +75,13 @@ export class MemoryEntryService {
       }
 
       return this.memoryEntryRepository.findById(entry.id);
-    });
+    };
+
+    if (options.transactional === false) {
+      return work();
+    }
+
+    return this.transactionRunner.run(work);
   }
 
   public updateMemoryEntry(entryId: string, input: Partial<MemoryEntryInput> & { tags?: string[]; relationships?: RelationshipInput[] }) {
@@ -93,6 +106,13 @@ export class MemoryEntryService {
     const redactedTitle = input.title !== undefined ? SecretScanner.redact(input.title) : undefined;
     const redactedContent = input.content !== undefined ? SecretScanner.redact(input.content) : undefined;
 
+    let redactedSummary: string | undefined | null = undefined;
+    if (input.summary !== undefined) {
+      redactedSummary = input.summary !== null ? SecretScanner.redact(input.summary) : null;
+    } else if (redactedContent !== undefined) {
+      redactedSummary = MemoryEntryService.extractSummary(redactedContent);
+    }
+
     return this.transactionRunner.run(() => {
       const updated = this.memoryEntryRepository.update(entryId, {
         title: redactedTitle,
@@ -100,7 +120,8 @@ export class MemoryEntryService {
         category: input.category,
         source: input.source,
         confidence: input.confidence,
-        relatedFiles: input.relatedFiles
+        relatedFiles: input.relatedFiles,
+        summary: redactedSummary
       });
 
       if (!updated) {
@@ -160,5 +181,27 @@ export class MemoryEntryService {
 
   private hashSource(path: string, content: string): string {
     return createHash('sha256').update(`${path}\n${content}`).digest('hex');
+  }
+
+  public static extractSummary(content: string): string {
+    const trimmed = content.trim();
+    if (!trimmed) {
+      return '';
+    }
+    const paragraphs = trimmed.split(/\r?\n\r?\n/);
+    let firstPara = paragraphs[0].trim();
+    if (firstPara.startsWith('#')) {
+      const cleanedHeader = firstPara.replace(/^#+\s*/, '').trim();
+      if (paragraphs.length > 1) {
+        const nextPara = paragraphs[1].trim().replace(/^#+\s*/, '').trim();
+        firstPara = `${cleanedHeader} - ${nextPara}`;
+      } else {
+        firstPara = cleanedHeader;
+      }
+    }
+    if (firstPara.length > 300) {
+      return firstPara.substring(0, 297) + '...';
+    }
+    return firstPara;
   }
 }

@@ -50,7 +50,7 @@ export function createMcpServer(context: McpServerContext) {
     sourceDocumentRepository,
     transactionRunner
   );
-  const memorySearchService = new MemorySearchService(memoryEntryRepository);
+  const memorySearchService = new MemorySearchService(memoryEntryRepository, tagRepository, projectRepository);
   const schemaMigrationService = new SchemaMigrationService(context.db);
 
   const indexingService = new IndexingService(

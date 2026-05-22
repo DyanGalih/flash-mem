@@ -8,6 +8,7 @@ import { MarkdownExportService } from '../../application/services/MarkdownExport
 import { MarkdownRestoreService } from '../../application/services/MarkdownRestoreService';
 import { SchemaMigrationService } from '../../application/services/SchemaMigrationService';
 import { MemoryEntryService } from '../../application/services/MemoryEntryService';
+import { MemorySearchService } from '../../application/services/MemorySearchService';
 import { VALID_CATEGORIES } from '../../domain/entities/MemoryEntry';
 import { IndexingService } from '../../application/services/IndexingService';
 import { startMcpServer } from '../../mcp/server';
@@ -24,6 +25,129 @@ import { SqliteTransactionRunner } from '../../infrastructure/database/SqliteTra
 
 const program = new Command();
 
+function writeToStream(stream: NodeJS.WritableStream, text: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    try {
+      stream.write(text, (error?: Error | null) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve();
+      });
+    } catch (error) {
+      reject(error as Error);
+    }
+  });
+}
+
+async function writeStdout(text: string): Promise<void> {
+  console.log(text.endsWith('\n') ? text.slice(0, -1) : text);
+  await new Promise<void>((resolve) => setTimeout(resolve, 25));
+}
+
+async function writeStderr(text: string): Promise<void> {
+  console.error(text.endsWith('\n') ? text.slice(0, -1) : text);
+  await new Promise<void>((resolve) => setTimeout(resolve, 25));
+}
+
+function normalizeList(input?: string): string[] {
+  if (!input) {
+    return [];
+  }
+
+  return Array.from(new Set(
+    input
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  ));
+}
+
+function formatSearchTable(rows: Array<Record<string, string>>): string {
+  if (rows.length === 0) {
+    return '';
+  }
+
+  const headers = Object.keys(rows[0]);
+  const widths = headers.map((header) => {
+    const values = rows.map((row) => row[header] ?? '');
+    return Math.max(header.length, ...values.map((value) => value.length));
+  });
+
+  const separator = `|-${widths.map((width) => '-'.repeat(width)).join('-|-')}-|`;
+  const renderRow = (row: Record<string, string>) => `| ${headers.map((header, index) => (row[header] ?? '').padEnd(widths[index])).join(' | ')} |`;
+  const headerRow = `| ${headers.map((header, index) => header.padEnd(widths[index])).join(' | ')} |`;
+
+  return [
+    headerRow,
+    separator,
+    ...rows.map(renderRow)
+  ].join('\n');
+}
+
+function renderSearchOutput(result: {
+  results: Array<{
+    id: string;
+    title: string;
+    summary?: string | null;
+    category: string;
+    tags: string[];
+    confidence?: number | null;
+    source: string;
+    content: string;
+    score: number;
+  }>;
+  suggestions?: {
+    categories: string[];
+    tags: string[];
+  };
+}, useJson: boolean, query?: string) {
+  if (useJson) {
+    return JSON.stringify({
+      success: true,
+      query: query ?? '',
+      results: result.results.map((entry) => ({
+        id: entry.id,
+        title: entry.title,
+        summary: entry.summary,
+        category: entry.category,
+        tags: entry.tags,
+        confidence: entry.confidence,
+        source: entry.source,
+        score: entry.score,
+        content: entry.content
+      })),
+      suggestions: result.suggestions ?? null
+    }, null, 2) + '\n';
+  }
+
+  if (result.results.length === 0) {
+    const categories = result.suggestions?.categories ?? [];
+    const tags = result.suggestions?.tags ?? [];
+    return [
+      'No matching memories were found.',
+      categories.length > 0 ? `Available categories: ${categories.join(', ')}` : 'Available categories: none',
+      tags.length > 0 ? `Available tags: ${tags.join(', ')}` : 'Available tags: none'
+    ].join('\n') + '\n';
+  }
+
+  const table = formatSearchTable(result.results.map((entry) => ({
+    Title: entry.title,
+    Category: entry.category,
+    Score: String(entry.score),
+    Confidence: entry.confidence === null || entry.confidence === undefined ? 'n/a' : String(entry.confidence),
+    Source: entry.source,
+    Tags: entry.tags.join(', '),
+    Summary: entry.summary ?? ''
+  })));
+
+  return [
+    `Found ${result.results.length} matching memories.`,
+    table
+  ].join('\n') + '\n';
+}
+
 program
   .name('flash-mem')
   .description('Local-first engineering memory server and CLI tool')
@@ -34,7 +158,7 @@ program
   .description('Initialize a new flash-mem workspace')
   .argument('[path]', 'The project path to initialize', '.')
   .option('-j, --json', 'Output structured JSON instead of plain text')
-  .action((dirArg, options) => {
+  .action(async (dirArg, options) => {
     const service = new InitializeProjectService();
     const useJson = !!options.json;
 
@@ -43,26 +167,28 @@ program
       const result = service.execute(targetDir);
 
       if (useJson) {
-        process.stdout.write(JSON.stringify({
+        await writeStdout(JSON.stringify({
           success: true,
           path: result.path,
           metadata: result.metadata
         }, null, 2) + '\n');
       } else {
-        process.stdout.write(`flash-mem initialized successfully at: ${result.path}\n`);
+        await writeStdout(`flash-mem initialized successfully at: ${result.path}\n`);
       }
-      process.exit(0);
+      process.exitCode = 0;
+      return;
     } catch (err: any) {
       const errMsg = err.message || 'Unknown error occurred during initialization';
-      process.stderr.write(`Error: ${errMsg}\n`);
+      await writeStderr(`Error: ${errMsg}\n`);
 
       if (useJson) {
-        process.stdout.write(JSON.stringify({
+        await writeStdout(JSON.stringify({
           success: false,
           error: errMsg
         }, null, 2) + '\n');
       }
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
   });
 
@@ -99,31 +225,33 @@ program
         const result = await service.exportWorkspace(workspaceRoot);
 
         if (useJson) {
-          process.stdout.write(JSON.stringify({
+          await writeStdout(JSON.stringify({
             success: true,
             path: result.manifest.exportRoot,
             manifest: result.manifest,
             files: result.files
           }, null, 2) + '\n');
         } else {
-          process.stdout.write(`markdown backups exported successfully to: ${result.manifest.exportRoot}\n`);
+          await writeStdout(`markdown backups exported successfully to: ${result.manifest.exportRoot}\n`);
         }
 
-        process.exit(0);
+        process.exitCode = 0;
+        return;
       } finally {
         db.close();
       }
     } catch (err: any) {
       const errMsg = err.message || 'Unknown error occurred during markdown export';
-      process.stderr.write(`Error: ${errMsg}\n`);
+      await writeStderr(`Error: ${errMsg}\n`);
 
       if (useJson) {
-        process.stdout.write(JSON.stringify({
+        await writeStdout(JSON.stringify({
           success: false,
           error: errMsg
         }, null, 2) + '\n');
       }
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
   });
 
@@ -254,31 +382,33 @@ program
         const results = indexingService.rebuildIndex(project.id, sources);
 
         if (useJson) {
-          process.stdout.write(JSON.stringify({
+          await writeStdout(JSON.stringify({
             success: true,
             rebuilt: true,
             entryCount: results.length,
             sourcesIndexed: sources.map(s => s.path)
           }, null, 2) + '\n');
         } else {
-          process.stdout.write(`Index rebuilt successfully! Transactionally processed ${results.length} entries from ${sources.length} markdown source files.\n`);
+          await writeStdout(`Index rebuilt successfully! Transactionally processed ${results.length} entries from ${sources.length} markdown source files.\n`);
         }
 
-        process.exit(0);
+        process.exitCode = 0;
+        return;
       } finally {
         db.close();
       }
     } catch (err: any) {
       const errMsg = err.message || 'Unknown error occurred during index rebuild';
-      process.stderr.write(`Error: ${errMsg}\n`);
+      await writeStderr(`Error: ${errMsg}\n`);
 
       if (useJson) {
-        process.stdout.write(JSON.stringify({
+        await writeStdout(JSON.stringify({
           success: false,
           error: errMsg
         }, null, 2) + '\n');
       }
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
   });
 
@@ -457,7 +587,7 @@ program
         }
 
         if (useJson) {
-          process.stdout.write(JSON.stringify({
+          await writeStdout(JSON.stringify({
             success: true,
             id: entry.id,
             entry: {
@@ -474,24 +604,100 @@ program
             }
           }, null, 2) + '\n');
         } else {
-          process.stdout.write(`Memory entry added successfully! ID: ${entry.id}\n`);
+          await writeStdout(`Memory entry added successfully! ID: ${entry.id}\n`);
         }
 
-        process.exit(0);
+        process.exitCode = 0;
+        return;
       } finally {
         db.close();
       }
     } catch (err: any) {
       const errMsg = err.message || 'Unknown error occurred during add';
-      process.stderr.write(`Error: ${errMsg}\n`);
+      await writeStderr(`Error: ${errMsg}\n`);
 
       if (useJson) {
-        process.stdout.write(JSON.stringify({
+        await writeStdout(JSON.stringify({
           success: false,
           error: errMsg
         }, null, 2) + '\n');
       }
-      process.exit(1);
+      process.exitCode = 1;
+      return;
+    }
+  });
+
+program
+  .command('search')
+  .description('Search memory entries by keyword and filters')
+  .argument('[query]', 'Keyword to search for')
+  .option('--workspace <path>', 'The workspace root containing the SQLite memory store', '.')
+  .option('--tags <items>', 'Comma-separated tags to require')
+  .option('--tag-operator <operator>', 'Combine multiple tags with AND or OR', 'AND')
+  .option('--category <string>', 'Category filter')
+  .option('--source <string>', 'Source document path filter')
+  .option('--min-confidence <number>', 'Minimum confidence score (0-100)', (val) => parseInt(val, 10))
+  .option('--limit <number>', 'Maximum number of results to return', (val) => parseInt(val, 10))
+  .option('--full-content', 'Include full content in search results')
+  .option('-j, --json', 'Output structured JSON instead of plain text')
+  .action(async (queryArg, options) => {
+    const useJson = !!options.json || !process.stdout.isTTY;
+
+    try {
+      const workspaceRoot = PathSanitizer.resolveRoot(options.workspace ?? '.');
+      if (!fs.existsSync(workspaceRoot) || !fs.statSync(workspaceRoot).isDirectory()) {
+        throw new Error(`Workspace path "${workspaceRoot}" does not exist or is not a directory`);
+      }
+
+      const dbFile = PathSanitizer.sanitizeSubPath(workspaceRoot, '.flash-mem/flashmem.sqlite');
+      if (!fs.existsSync(dbFile)) {
+        throw new Error(`No SQLite memory store found at "${dbFile}". Run "flash-mem init" first.`);
+      }
+
+      const db = createDatabaseConnection(dbFile);
+      try {
+        const projectRepo = new ProjectRepository(db);
+        const memoryEntryRepository = new MemoryEntryRepository(db);
+        const tagRepository = new TagRepository(db);
+        const searchService = new MemorySearchService(memoryEntryRepository, tagRepository, projectRepo);
+
+        const searchOptions = {
+          query: typeof queryArg === 'string' ? queryArg.trim() : undefined,
+          category: options.category?.trim() || undefined,
+          tags: normalizeList(options.tags),
+          tagOperator: options.tagOperator ? String(options.tagOperator).trim().toUpperCase() as 'AND' | 'OR' : undefined,
+          minConfidence: options.minConfidence !== undefined ? Number(options.minConfidence) : undefined,
+          source: options.source?.trim() || undefined,
+          includeContent: !!options.fullContent,
+          limit: options.limit !== undefined ? Number(options.limit) : undefined
+        };
+
+        const result = searchService.search(searchOptions);
+        const output = renderSearchOutput(result, useJson, searchOptions.query);
+
+        if (useJson) {
+          await writeStdout(output);
+        } else {
+          await writeStdout(output);
+        }
+
+        process.exitCode = 0;
+        return;
+      } finally {
+        db.close();
+      }
+    } catch (err: any) {
+      const errMsg = err.message || 'Unknown error occurred during search';
+      await writeStderr(`Error: ${errMsg}\n`);
+
+      if (useJson) {
+        await writeStdout(JSON.stringify({
+          success: false,
+          error: errMsg
+        }, null, 2) + '\n');
+      }
+      process.exitCode = 1;
+      return;
     }
   });
 
@@ -519,8 +725,9 @@ program
       }
     } catch (err: any) {
       const errMsg = err.message || 'Unknown error occurred while starting the MCP server';
-      process.stderr.write(`Error: ${errMsg}\n`);
-      process.exit(1);
+      await writeStderr(`Error: ${errMsg}\n`);
+      process.exitCode = 1;
+      return;
     }
   });
 
@@ -530,7 +737,7 @@ program
   .argument('[path]', 'Path to the backup directory (defaults to .flash-mem/exports relative to workspace root)')
   .option('-j, --json', 'Output structured JSON instead of plain text')
   .option('--workspace <path>', 'The workspace root to restore into (defaults to current working directory)', '.')
-  .action((dirArg, options) => {
+  .action(async (dirArg, options) => {
     const useJson = !!options.json;
 
     try {
@@ -564,7 +771,7 @@ program
         const result = service.restore(backupDirectory, workspaceRoot);
 
         if (useJson) {
-          process.stdout.write(JSON.stringify({
+          await writeStdout(JSON.stringify({
             success: true,
             restoredEntries: result.restoredEntries,
             restoredRelationships: result.restoredRelationships,
@@ -572,7 +779,7 @@ program
             warnings: result.warnings
           }, null, 2) + '\n');
         } else {
-          process.stdout.write(
+          await writeStdout(
             `Restore complete. Restored ${result.restoredEntries} entr${result.restoredEntries === 1 ? 'y' : 'ies'} ` +
             `and ${result.restoredRelationships} relationship${result.restoredRelationships === 1 ? '' : 's'}` +
             (result.skippedFiles.length > 0 ? ` (${result.skippedFiles.length} file(s) skipped).` : '.') +
@@ -580,27 +787,38 @@ program
           );
         }
 
-        process.exit(0);
+        process.exitCode = 0;
+        return;
       } finally {
         db.close();
       }
     } catch (err: any) {
       const errMsg = err.message || 'Unknown error occurred during backup restore';
-      process.stderr.write(`Error: ${errMsg}\n`);
+      await writeStderr(`Error: ${errMsg}\n`);
 
       if (useJson) {
-        process.stdout.write(JSON.stringify({
+        await writeStdout(JSON.stringify({
           success: false,
           error: errMsg
         }, null, 2) + '\n');
       }
-      process.exit(1);
+      process.exitCode = 1;
+      return;
     }
   });
 
 // Only parse if executed as a script
-if (require.main === module || !module.parent) {
-  void program.parseAsync(process.argv);
+if ((require.main === module || !module.parent) && !process.env.VITEST && !process.env.VITEST_WORKER_ID) {
+  const keepAlive = setInterval(() => {
+    // Keep the event loop open until CLI parsing and output complete.
+  }, 1000);
+  void (async () => {
+    try {
+      await program.parseAsync(process.argv);
+    } finally {
+      clearInterval(keepAlive);
+    }
+  })();
 }
 
 export { program };

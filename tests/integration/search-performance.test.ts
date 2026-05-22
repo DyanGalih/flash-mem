@@ -66,7 +66,7 @@ describe('Search Performance', () => {
 
     const search = new MemorySearchService(new MemoryEntryRepository(db));
     const started = performance.now();
-    const results = search.search(project.id, 'needle');
+    const results = search.search({ projectId: project.id, query: 'needle' }).results;
     const duration = performance.now() - started;
 
     expect(results.length).toBeGreaterThan(0);

@@ -69,7 +69,7 @@ describe('Memory Store Integration', () => {
       tags: ['sqlite', 'memory']
     });
 
-    expect(search.search(project.id, 'memory')[0].id).toBe(created?.id);
+    expect(search.search({ projectId: project.id, query: 'memory' }).results[0].id).toBe(created?.id);
 
     const results = indexing.indexSources(project.id, [{
       path: 'docs/memory/overview.md',
@@ -81,6 +81,6 @@ describe('Memory Store Integration', () => {
     }]);
 
     expect(results.length).toBe(1);
-    expect(search.search(project.id, 'docs').length).toBe(1);
+    expect(search.search({ projectId: project.id, query: 'docs' }).results.length).toBe(1);
   });
 });

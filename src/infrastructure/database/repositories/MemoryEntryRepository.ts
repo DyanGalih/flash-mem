@@ -2,7 +2,7 @@ import Database from 'better-sqlite3';
 import { createId, now } from '../helpers';
 import { MemoryEntry, MemoryEntryInput, MemoryEntrySchema } from '../../../domain/entities/MemoryEntry';
 import { Relationship } from '../../../domain/entities/Relationship';
-import { IMemoryEntryRepository } from '../../../domain/repositories/interfaces';
+import { IMemoryEntryRepository, MemorySearchOptions } from '../../../domain/repositories/interfaces';
 
 export interface MemoryEntryRecord extends MemoryEntry {
   tags: string[];
@@ -26,6 +26,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
       source: input.source,
       confidence: input.confidence ?? null,
       relatedFiles: input.relatedFiles ?? null,
+      summary: input.summary ?? null,
       sourceDocumentId,
       createdAt: timestamp,
       updatedAt: timestamp,
@@ -35,7 +36,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
     if (existing) {
       this.db.prepare(`
         UPDATE memory_entries
-        SET title = ?, content = ?, content_hash = ?, category = ?, source = ?, confidence = ?, related_files = ?, source_document_id = ?, updated_at = ?, deleted_at = NULL
+        SET title = ?, content = ?, content_hash = ?, category = ?, source = ?, confidence = ?, summary = ?, related_files = ?, source_document_id = ?, updated_at = ?, deleted_at = NULL
         WHERE id = ?
       `).run(
         input.title,
@@ -44,6 +45,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
         input.category,
         input.source,
         input.confidence ?? null,
+        input.summary ?? null,
         input.relatedFiles ? JSON.stringify(input.relatedFiles) : null,
         sourceDocumentId,
         timestamp,
@@ -58,6 +60,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
         category: input.category,
         source: input.source,
         confidence: input.confidence ?? null,
+        summary: input.summary ?? null,
         relatedFiles: input.relatedFiles ?? null,
         sourceDocumentId,
         updatedAt: timestamp,
@@ -70,8 +73,8 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
 
     this.db.prepare(`
       INSERT INTO memory_entries (
-        id, project_id, title, content, content_hash, category, source, confidence, related_files, source_document_id, created_at, updated_at, deleted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, title, content, content_hash, category, source, confidence, summary, related_files, source_document_id, created_at, updated_at, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       record.id,
       record.projectId,
@@ -81,6 +84,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
       record.category,
       record.source,
       record.confidence ?? null,
+      record.summary ?? null,
       record.relatedFiles ? JSON.stringify(record.relatedFiles) : null,
       record.sourceDocumentId ?? null,
       record.createdAt,
@@ -99,8 +103,8 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
   public restore(entry: MemoryEntry): void {
     this.db.prepare(`
       INSERT OR REPLACE INTO memory_entries (
-        id, project_id, title, content, content_hash, category, source, confidence, related_files, source_document_id, created_at, updated_at, deleted_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        id, project_id, title, content, content_hash, category, source, confidence, summary, related_files, source_document_id, created_at, updated_at, deleted_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       entry.id,
       entry.projectId,
@@ -110,6 +114,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
       entry.category,
       entry.source,
       entry.confidence ?? null,
+      entry.summary ?? null,
       entry.relatedFiles ? JSON.stringify(entry.relatedFiles) : null,
       entry.sourceDocumentId ?? null,
       entry.createdAt,
@@ -129,6 +134,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
       source: string;
       confidence: number | null;
       relatedFiles: string[] | null;
+      summary: string | null;
     }>
   ): MemoryEntry | null {
     const existing = this.findById(entryId);
@@ -163,6 +169,10 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
     if (input.confidence !== undefined) {
       fieldsToUpdate.push('confidence = ?');
       params.push(input.confidence);
+    }
+    if (input.summary !== undefined) {
+      fieldsToUpdate.push('summary = ?');
+      params.push(input.summary);
     }
     if (input.relatedFiles !== undefined) {
       fieldsToUpdate.push('related_files = ?');
@@ -220,7 +230,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
   public findById(entryId: string): MemoryEntry | null {
     const row = this.db.prepare(`
       SELECT id, project_id AS projectId, title, content, content_hash AS contentHash,
-             category, source, confidence, related_files AS relatedFiles, source_document_id AS sourceDocumentId,
+             category, source, confidence, summary, related_files AS relatedFiles, source_document_id AS sourceDocumentId,
              created_at AS createdAt, updated_at AS updatedAt, deleted_at AS deletedAt
       FROM memory_entries
       WHERE id = ?
@@ -232,7 +242,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
   public findByProjectAndHash(projectId: string, contentHash: string, category: string): MemoryEntry | null {
     const row = this.db.prepare(`
       SELECT id, project_id AS projectId, title, content, content_hash AS contentHash,
-             category, source, confidence, related_files AS relatedFiles, source_document_id AS sourceDocumentId,
+             category, source, confidence, summary, related_files AS relatedFiles, source_document_id AS sourceDocumentId,
              created_at AS createdAt, updated_at AS updatedAt, deleted_at AS deletedAt
       FROM memory_entries
       WHERE project_id = ? AND content_hash = ? AND category = ? AND deleted_at IS NULL
@@ -245,7 +255,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
   public listByProject(projectId: string): MemoryEntry[] {
     const rows = this.db.prepare(`
       SELECT id, project_id AS projectId, title, content, content_hash AS contentHash,
-             category, source, confidence, related_files AS relatedFiles, source_document_id AS sourceDocumentId,
+             category, source, confidence, summary, related_files AS relatedFiles, source_document_id AS sourceDocumentId,
              created_at AS createdAt, updated_at AS updatedAt, deleted_at AS deletedAt
       FROM memory_entries
       WHERE project_id = ? AND deleted_at IS NULL
@@ -255,66 +265,144 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
     return rows.map((row) => this.mapRowToEntry(row));
   }
 
-  public search(projectId: string, query: string, limit = 20): Array<MemoryEntryRecord & { score: number }> {
-    const normalized = query.trim().toLowerCase();
-    const pattern = `%${normalized}%`;
+  public search(options: MemorySearchOptions): Array<MemoryEntry & { tags: string[]; relationships: Relationship[]; score: number }> {
+    const whereClauses: string[] = ['me.deleted_at IS NULL'];
+    const joins: string[] = [];
+    const params: any[] = [];
 
-    const contentRows = this.db.prepare(`
-      SELECT
-        id,
-        CASE
-          WHEN LOWER(title) = LOWER(?) THEN 100
-          WHEN LOWER(content) LIKE ? THEN 80
-          ELSE 0
-        END AS score
-      FROM memory_entries
-      WHERE project_id = ? AND deleted_at IS NULL
-        AND (LOWER(title) LIKE ? OR LOWER(content) LIKE ?)
-    `).all(normalized, pattern, projectId, pattern, pattern) as Array<{ id: string; score: number }>;
+    if (options.projectId) {
+      whereClauses.push('me.project_id = ?');
+      params.push(options.projectId);
+    }
 
-    const tagRows = this.db.prepare(`
-      SELECT
-        me.id,
-        CASE
-          WHEN LOWER(t.name) = LOWER(?) THEN 90
-          ELSE 70
-        END AS score
+    if (options.category) {
+      whereClauses.push('me.category = ?');
+      params.push(options.category);
+    }
+
+    if (options.minConfidence !== undefined && options.minConfidence !== null) {
+      whereClauses.push('me.confidence >= ?');
+      params.push(options.minConfidence);
+    }
+
+    if (options.source) {
+      joins.push('LEFT JOIN source_documents sd ON sd.id = me.source_document_id');
+      whereClauses.push('sd.path = ?');
+      params.push(options.source);
+    }
+
+    if (options.tags && options.tags.length > 0) {
+      const tagPlaceholders = options.tags.map(() => '?').join(', ');
+      const lowerTags = options.tags.map(t => t.toLowerCase());
+
+      if (options.tagOperator === 'OR') {
+        whereClauses.push(`me.id IN (
+          SELECT met.entry_id
+          FROM memory_entry_tags met
+          JOIN tags t ON t.id = met.tag_id
+          WHERE LOWER(t.name) IN (${tagPlaceholders})
+        )`);
+        params.push(...lowerTags);
+      } else {
+        // Default to AND
+        whereClauses.push(`me.id IN (
+          SELECT met.entry_id
+          FROM memory_entry_tags met
+          JOIN tags t ON t.id = met.tag_id
+          WHERE LOWER(t.name) IN (${tagPlaceholders})
+          GROUP BY met.entry_id
+          HAVING COUNT(DISTINCT LOWER(t.name)) = ?
+        )`);
+        params.push(...lowerTags, lowerTags.length);
+      }
+    }
+
+    if (options.query) {
+      const queryLower = options.query.trim().toLowerCase();
+      const queryPattern = `%${queryLower}%`;
+      whereClauses.push(`(
+        LOWER(me.title) LIKE ? OR
+        LOWER(me.content) LIKE ? OR
+        me.id IN (
+          SELECT met.entry_id
+          FROM memory_entry_tags met
+          JOIN tags t ON t.id = met.tag_id
+          WHERE LOWER(t.name) LIKE ?
+        )
+      )`);
+      params.push(queryPattern, queryPattern, queryPattern);
+    }
+
+    const sql = `
+      SELECT me.id, me.project_id AS projectId, me.title, me.content, me.content_hash AS contentHash,
+             me.category, me.source, me.confidence, me.summary, me.source_document_id AS sourceDocumentId,
+             me.created_at AS createdAt, me.updated_at AS updatedAt, me.deleted_at AS deletedAt
       FROM memory_entries me
-      INNER JOIN memory_entry_tags met ON met.entry_id = me.id
-      INNER JOIN tags t ON t.id = met.tag_id
-      WHERE me.project_id = ? AND me.deleted_at IS NULL
-        AND (LOWER(t.name) = LOWER(?) OR LOWER(t.name) LIKE ?)
-    `).all(normalized, projectId, normalized, pattern) as Array<{ id: string; score: number }>;
+      ${joins.join('\n      ')}
+      WHERE ${whereClauses.join(' AND ')}
+    `;
 
-    const scoreMap = new Map<string, number>();
-    for (const row of [...contentRows, ...tagRows]) {
-      const previous = scoreMap.get(row.id) ?? 0;
-      scoreMap.set(row.id, Math.max(previous, row.score));
-    }
+    const rows = this.db.prepare(sql).all(...params) as any[];
 
-    const ids = Array.from(scoreMap.keys());
-    if (ids.length === 0) {
-      return [];
-    }
+    const results = rows.map((row) => {
+      let score = 100;
+      const entryTags = this.listTagsForEntry(row.id);
 
-    const placeholders = ids.map(() => '?').join(', ');
-    const rows = this.db.prepare(`
-      SELECT id, project_id AS projectId, title, content, content_hash AS contentHash,
-             category, source, confidence, related_files AS relatedFiles, source_document_id AS sourceDocumentId,
-             created_at AS createdAt, updated_at AS updatedAt, deleted_at AS deletedAt
-      FROM memory_entries
-      WHERE id IN (${placeholders})
-    `).all(...ids) as any[];
+      if (options.query) {
+        const queryLower = options.query.trim().toLowerCase();
+        const titleLower = row.title.toLowerCase();
+        const contentLower = (row.content ?? '').toLowerCase();
 
-    return rows
-      .map((row) => ({
-        ...this.mapRowToEntry(row),
-        tags: this.listTagsForEntry(row.id),
+        if (titleLower === queryLower) {
+          score = 100;
+        } else if (titleLower.includes(queryLower)) {
+          score = 80;
+        } else if (entryTags.some(t => t.toLowerCase() === queryLower)) {
+          score = 90;
+        } else if (entryTags.some(t => t.toLowerCase().includes(queryLower))) {
+          score = 70;
+        } else if (contentLower.includes(queryLower)) {
+          score = 50;
+        } else {
+          score = 10;
+        }
+      }
+
+      const mapped = this.mapRowToEntry(row);
+      return {
+        ...mapped,
+        content: options.includeContent ? (row.content ?? '') : '',
+        contentHash: options.includeContent ? mapped.contentHash : 'OMITTED',
+        tags: entryTags,
         relationships: this.listRelationshipsForEntry(row.id),
-        score: scoreMap.get(row.id) ?? 0
-      }))
+        score
+      };
+    });
+
+    const limit = options.limit ?? 20;
+    return results
       .sort((left, right) => right.score - left.score || right.updatedAt - left.updatedAt)
       .slice(0, limit);
+  }
+
+  public listAllCategories(projectId?: string): string[] {
+    if (projectId) {
+      const rows = this.db.prepare(`
+        SELECT DISTINCT category
+        FROM memory_entries
+        WHERE project_id = ? AND deleted_at IS NULL
+        ORDER BY category ASC
+      `).all(projectId) as Array<{ category: string }>;
+      return rows.map(r => r.category);
+    } else {
+      const rows = this.db.prepare(`
+        SELECT DISTINCT category
+        FROM memory_entries
+        WHERE deleted_at IS NULL
+        ORDER BY category ASC
+      `).all() as Array<{ category: string }>;
+      return rows.map(r => r.category);
+    }
   }
 
   public listTagsForEntry(entryId: string): string[] {
@@ -390,11 +478,12 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
       id: row.id,
       projectId: row.projectId,
       title: row.title,
-      content: row.content,
+      content: row.content ?? '',
       contentHash: row.contentHash,
       category: row.category,
       source: row.source,
       confidence: row.confidence !== null && row.confidence !== undefined ? Number(row.confidence) : null,
+      summary: row.summary ?? null,
       relatedFiles: relatedFiles,
       sourceDocumentId: row.sourceDocumentId,
       createdAt: row.createdAt,

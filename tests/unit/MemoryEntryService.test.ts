@@ -133,4 +133,24 @@ describe('MemoryEntryService', () => {
     expect(created?.title).not.toContain('AKIA1234567890123456');
     expect(created?.content).not.toContain('AKIA1234567890123456');
   });
+
+  describe('extractSummary', () => {
+    it('extracts summary correctly', () => {
+      // Plain text single line
+      expect(MemoryEntryService.extractSummary('Hello world')).toBe('Hello world');
+
+      // Multi-line markdown header and paragraph
+      const md = '# Header Title\n\nThis is the first paragraph.\n\nThis is the second paragraph.';
+      expect(MemoryEntryService.extractSummary(md)).toBe('Header Title - This is the first paragraph.');
+
+      // Just header
+      expect(MemoryEntryService.extractSummary('# Header Title')).toBe('Header Title');
+
+      // Long paragraph truncation
+      const longText = 'a'.repeat(400);
+      const summary = MemoryEntryService.extractSummary(longText);
+      expect(summary.length).toBe(300);
+      expect(summary.endsWith('...')).toBe(true);
+    });
+  });
 });

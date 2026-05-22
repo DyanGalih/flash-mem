@@ -84,4 +84,23 @@ export class TagRepository implements ITagRepository {
 
     return this.getOrCreate(projectRow.projectId, name);
   }
+
+  public listAllTags(projectId?: string): string[] {
+    if (projectId) {
+      const rows = this.db.prepare(`
+        SELECT DISTINCT name
+        FROM tags
+        WHERE project_id = ?
+        ORDER BY name ASC
+      `).all(projectId) as Array<{ name: string }>;
+      return rows.map(r => r.name);
+    } else {
+      const rows = this.db.prepare(`
+        SELECT DISTINCT name
+        FROM tags
+        ORDER BY name ASC
+      `).all() as Array<{ name: string }>;
+      return rows.map(r => r.name);
+    }
+  }
 }

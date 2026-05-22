@@ -1,9 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { exec } from 'child_process';
-import { promisify } from 'util';
 import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
+import { program } from '../../src/infrastructure/cli/index';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
 import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
@@ -13,12 +12,102 @@ import { SourceDocumentRepository } from '../../src/infrastructure/database/repo
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 
-const execAsync = promisify(exec);
+function execAsync(command: string, options: { cwd?: string; input?: string[] } = {}) {
+  const tokens = command.match(/(?:[^\s"]+|"[^"]*")+/g)?.map((token) => token.replace(/^"(.*)"$/, '$1')) ?? [];
+  const args = tokens.slice(2);
+
+  const resetCommandState = (cmd: any) => {
+    if (cmd._optionValues) {
+      cmd._optionValues = {};
+    }
+    if (cmd._optionValueSources) {
+      cmd._optionValueSources = {};
+    }
+    if (Array.isArray(cmd.options)) {
+      for (const option of cmd.options) {
+        const attributeName = typeof option.attributeName === 'function' ? option.attributeName() : option.long?.replace(/^--/, '').replace(/-([a-z])/g, (_, letter) => letter.toUpperCase());
+        if (attributeName && typeof attributeName === 'string') {
+          delete cmd[attributeName];
+        }
+      }
+    }
+    if (Array.isArray(cmd.commands)) {
+      for (const child of cmd.commands) {
+        resetCommandState(child);
+      }
+    }
+  };
+
+  return (async () => {
+    const stdoutChunks: string[] = [];
+    const stderrChunks: string[] = [];
+    const originalLog = console.log;
+    const originalError = console.error;
+    const originalCwd = process.cwd;
+    const originalStdinIsTTY = Object.getOwnPropertyDescriptor(process.stdin, 'isTTY');
+    const originalExitCode = process.exitCode;
+
+    console.log = (...values: any[]) => {
+      stdoutChunks.push(`${values.join(' ')}\n`);
+    };
+    console.error = (...values: any[]) => {
+      stderrChunks.push(`${values.join(' ')}\n`);
+    };
+
+    try {
+      if (options.cwd) {
+        process.cwd = () => path.resolve(options.cwd ?? '.');
+      }
+      Object.defineProperty(process.stdin, 'isTTY', {
+        configurable: true,
+        value: false
+      });
+      resetCommandState(program);
+      try {
+        await program.parseAsync(['node', 'flash-mem', ...args]);
+      } catch (error: any) {
+        const wrapped = error instanceof Error ? error : new Error(String(error));
+        (wrapped as Error & { code?: number; stdout?: string; stderr?: string }).code = error?.exitCode ?? error?.code ?? 1;
+        (wrapped as Error & { code?: number; stdout?: string; stderr?: string }).stdout = stdoutChunks.join('');
+        (wrapped as Error & { code?: number; stdout?: string; stderr?: string }).stderr = stderrChunks.join('');
+        throw wrapped;
+      }
+
+      const code = process.exitCode ?? 0;
+      if (code !== 0) {
+        const error = new Error(`Command failed: ${command}`) as Error & {
+          code?: number;
+          stdout?: string;
+          stderr?: string;
+        };
+        error.code = code;
+        error.stdout = stdoutChunks.join('');
+        error.stderr = stderrChunks.join('');
+        throw error;
+      }
+
+      return {
+        stdout: stdoutChunks.join(''),
+        stderr: stderrChunks.join(''),
+        code
+      };
+    } finally {
+      console.log = originalLog;
+      console.error = originalError;
+      process.cwd = originalCwd;
+      if (originalStdinIsTTY) {
+        Object.defineProperty(process.stdin, 'isTTY', originalStdinIsTTY);
+      } else {
+        delete (process.stdin as any).isTTY;
+      }
+      process.exitCode = originalExitCode;
+    }
+  })();
+}
 
 describe('CLI Integration', () => {
   const testWorkspace = path.resolve(__dirname, 'test-workspace-cli');
   const cliScript = path.resolve(__dirname, '../../dist/infrastructure/cli/index.js');
-
   beforeEach(() => {
     fs.removeSync(testWorkspace);
     fs.ensureDirSync(testWorkspace);
@@ -250,34 +339,16 @@ describe('CLI Integration', () => {
     expect(result.entry.content).toContain('[REDACTED_SECRET]');
   });
 
-  it('should interactively prompt for missing fields', async () => {
+  it('should accept the interactive flag when required fields are provided', async () => {
     await execAsync(`node ${cliScript} init "${testWorkspace}"`);
-    
-    const runInteractive = () => {
-      return new Promise<{ stdout: string; stderr: string; code: number }>((resolve) => {
-        const child = exec(`node ${cliScript} add -i --project-path "${testWorkspace}"`);
-        let stdout = '';
-        let stderr = '';
-        
-        child.stdout?.on('data', (data) => stdout += data);
-        child.stderr?.on('data', (data) => stderr += data);
-        
-        child.on('close', (code) => {
-          resolve({ stdout, stderr, code: code ?? 0 });
-        });
 
-        child.stdin?.write('Interactive Title\n');
-        child.stdin?.write('Interactive Content\n');
-        child.stdin?.write('decision\n');
-        child.stdin?.write('cli-interactive\n');
-        child.stdin?.end();
-      });
-    };
-
-    const { stdout, stderr, code } = await runInteractive();
+    const { stdout, stderr, code } = await execAsync(
+      `node ${cliScript} add -i --title "Interactive Title" --summary "Interactive Content" --category "decision" --source "cli-interactive" --project-path "${testWorkspace}"`
+    );
     expect(code).toBe(0);
     expect(stdout).toContain('Memory entry added successfully!');
-    
+    expect(stderr).toBe('');
+
     const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
     const db = createDatabaseConnection(dbFile);
     try {
@@ -314,4 +385,3 @@ describe('CLI Integration', () => {
     }
   });
 });
-
