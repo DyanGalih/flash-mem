@@ -33,7 +33,7 @@ flash-mem add [options]
 
 **Options:**
 * `--title <string>`: Title of the memory entry (e.g., "Use SQLite for Database").
-* `--summary <string>`: Content or summary describing the memory entry.
+* `--content <string>`: Content/body describing the memory entry.
 * `--category <string>`: The category of the memory. Must be one of the 12 schema-validated values:
   * `project`
   * `framework`
@@ -48,21 +48,25 @@ flash-mem add [options]
   * `constraint`
   * `integration`
 * `--source <string>`: The source of the memory (e.g., `cli`, `mcp`, `user`).
-* `--tags <items>`: Comma-separated list of tags (e.g., `sqlite,db`).
+* `--tag <string>`: Repeatable tag flag (e.g., `--tag sqlite --tag db`).
 * `--confidence <number>`: Confidence score of the entry (0-100).
-* `--related-files <items>`: Comma-separated list of relative file paths.
-* `--project-path <path>`: Path to the workspace root directory (defaults to `.`).
+* `--related-file <string>`: Repeatable related-file flag for relative paths.
+* `--project-path <path>`: Path to the workspace root directory. When omitted, the CLI resolves the nearest Git repository root from the current working directory and falls back to the current working directory if no Git root exists.
 * `-i, --interactive`: Interactively prompt for missing required fields via the terminal.
 * `-j, --json`: Output the result as a structured JSON object.
 
 #### Interactive Mode Example
-If required fields (like `title`, `summary`, `category`, `source`) are not provided in the arguments, the `-i` or `--interactive` flag will prompt for them:
+If required fields (like `title`, `content`, `category`, `source`) are not provided in the arguments, the `-i` or `--interactive` flag will prompt for them:
 ```bash
 $ flash-mem add --interactive
 Enter title (required): SQLite connection limits
-Enter summary (required): Limit max SQLite connection pools to 1 to avoid file locks.
+Enter content (required): Limit max SQLite connection pools to 1 to avoid file locks.
 Enter category (project, framework, ...): decision
 Enter source (required, e.g., cli, mcp, user): cli
+Enter tags (comma-separated, optional): sqlite,db
+Enter confidence (0-100, default 50): 50
+Enter related files (comma-separated, optional): src/db.ts
+Enter project path (optional, defaults to current repo):
 Memory entry added successfully! ID: 1
 ```
 

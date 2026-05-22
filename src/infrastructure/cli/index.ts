@@ -3,25 +3,26 @@ import { Command } from 'commander';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as readline from 'readline';
+import { IndexingService } from '../../application/services/IndexingService';
 import { InitializeProjectService } from '../../application/services/InitializeProjectService';
 import { MarkdownExportService } from '../../application/services/MarkdownExportService';
 import { MarkdownRestoreService } from '../../application/services/MarkdownRestoreService';
-import { SchemaMigrationService } from '../../application/services/SchemaMigrationService';
 import { MemoryEntryService } from '../../application/services/MemoryEntryService';
 import { MemorySearchService } from '../../application/services/MemorySearchService';
+import { SchemaMigrationService } from '../../application/services/SchemaMigrationService';
 import { VALID_CATEGORIES } from '../../domain/entities/MemoryEntry';
-import { IndexingService } from '../../application/services/IndexingService';
-import { startMcpServer } from '../../mcp/server';
 import { createDatabaseConnection } from '../../infrastructure/database/connection';
-import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
-import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
-import { ProjectRepository } from '../../infrastructure/database/repositories/ProjectRepository';
+import { IndexingRunRepository } from '../../infrastructure/database/repositories/IndexingRunRepository';
 import { MemoryEntryRepository } from '../../infrastructure/database/repositories/MemoryEntryRepository';
-import { TagRepository } from '../../infrastructure/database/repositories/TagRepository';
+import { ProjectRepository } from '../../infrastructure/database/repositories/ProjectRepository';
 import { RelationshipRepository } from '../../infrastructure/database/repositories/RelationshipRepository';
 import { SourceDocumentRepository } from '../../infrastructure/database/repositories/SourceDocumentRepository';
-import { IndexingRunRepository } from '../../infrastructure/database/repositories/IndexingRunRepository';
+import { TagRepository } from '../../infrastructure/database/repositories/TagRepository';
 import { SqliteTransactionRunner } from '../../infrastructure/database/SqliteTransactionRunner';
+import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
+import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
+import { startMcpServer } from '../../mcp/server';
+import { resolveWorkspaceRootForAdd } from './workspace-root';
 
 const program = new Command();
 
@@ -62,6 +63,33 @@ function normalizeList(input?: string): string[] {
       .map((item) => item.trim())
       .filter(Boolean)
   ));
+}
+
+function normalizeRepeatedValues(input?: string | string[]): string[] {
+  if (!input) {
+    return [];
+  }
+
+  const values = Array.isArray(input) ? input : [input];
+  return Array.from(new Set(
+    values
+      .flatMap((value) => value.split(','))
+      .map((item) => item.trim())
+      .filter(Boolean)
+  ));
+}
+
+function parseConfidence(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === '') {
+    return undefined;
+  }
+
+  const parsed = typeof value === 'number' ? value : Number.parseInt(String(value), 10);
+  if (!Number.isInteger(parsed) || parsed < 0 || parsed > 100) {
+    throw new Error('Confidence must be an integer between 0 and 100');
+  }
+
+  return parsed;
 }
 
 function formatSearchTable(rows: Array<Record<string, string>>): string {
@@ -424,12 +452,26 @@ program
   .command('add')
   .description('Add a new memory entry')
   .option('--title <string>', 'Title of the memory entry')
-  .option('--summary <string>', 'Summary/content of the memory entry')
+  .option('--content <string>', 'Content/body of the memory entry')
   .option('--category <string>', 'Category of the memory entry')
   .option('--source <string>', 'Source of the memory entry')
-  .option('--tags <items>', 'Comma-separated tags')
+  .option('--tag <string>', 'Tag for the memory entry', (value, previous: string[] = []) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return previous;
+    }
+
+    return Array.from(new Set([...previous, normalized]));
+  }, [])
   .option('--confidence <number>', 'Confidence score (0-100)', (val) => parseInt(val, 10))
-  .option('--related-files <items>', 'Comma-separated relative file paths')
+  .option('--related-file <string>', 'Related file path for the memory entry', (value, previous: string[] = []) => {
+    const normalized = value.trim();
+    if (!normalized) {
+      return previous;
+    }
+
+    return Array.from(new Set([...previous, normalized]));
+  }, [])
   .option('--project-path <path>', 'Path to the workspace root directory (defaults to current working directory)', '.')
   .option('-i, --interactive', 'Interactively prompt for missing fields')
   .option('-j, --json', 'Output structured JSON instead of plain text')
@@ -438,25 +480,21 @@ program
     const isInteractive = !!options.interactive;
 
     try {
-      // 1. Resolve and validate workspace root using PathSanitizer.resolveRoot (SEC-001)
-      const resolvedWorkspace = PathSanitizer.resolveRoot(options.projectPath ?? '.');
-      if (!fs.existsSync(resolvedWorkspace) || !fs.statSync(resolvedWorkspace).isDirectory()) {
-        throw new Error(`Workspace path "${resolvedWorkspace}" does not exist or is not a directory`);
-      }
-
-      // 2. Resolve database path relative to workspace root (SEC-001)
-      const dbFile = PathSanitizer.sanitizeSubPath(resolvedWorkspace, '.flash-mem/flashmem.sqlite');
-      if (!fs.existsSync(dbFile)) {
-        throw new Error(`No SQLite memory store found at "${dbFile}". Run "flash-mem init" first.`);
-      }
-
       let title = options.title?.trim();
-      let summary = options.summary?.trim();
+      let content = options.content?.trim();
       let category = options.category?.trim();
       let source = options.source?.trim();
+      let tags = normalizeRepeatedValues(options.tag);
+      let confidence = parseConfidence(options.confidence);
+      let relatedFiles = normalizeRepeatedValues(options.relatedFile);
+      let projectPath = options.projectPath?.trim();
 
       // If interactive, prompt for missing required fields
       if (isInteractive) {
+        if (!process.stdin.isTTY) {
+          throw new Error('Interactive mode requires a TTY terminal');
+        }
+
         const rl = readline.createInterface({
           input: process.stdin,
           output: process.stderr
@@ -497,11 +535,11 @@ program
             }
           }
 
-          if (!summary) {
-            while (!summary) {
-              summary = await ask('Enter summary (required): ');
-              if (!summary) {
-                process.stderr.write('Summary cannot be empty.\n');
+          if (!content) {
+            while (!content) {
+              content = await ask('Enter content (required): ');
+              if (!content) {
+                process.stderr.write('Content cannot be empty.\n');
               }
             }
           }
@@ -509,7 +547,7 @@ program
           const validCategories = VALID_CATEGORIES as readonly string[];
           if (!category || !validCategories.includes(category)) {
             while (!category || !validCategories.includes(category)) {
-              const promptMsg = category 
+              const promptMsg = category
                 ? `Invalid category "${category}".\nChoose one of: ${validCategories.join(', ')}\nEnter category: `
                 : `Enter category (${validCategories.join(', ')}): `;
               category = await ask(promptMsg);
@@ -527,6 +565,35 @@ program
               }
             }
           }
+
+          if (tags.length === 0) {
+            const tagInput = await ask('Enter tags (comma-separated, optional): ');
+            tags = normalizeRepeatedValues(tagInput);
+          }
+
+          while (confidence === undefined) {
+            const confidenceInput = await ask('Enter confidence (0-100, default 50): ');
+            if (confidenceInput.trim() === '') {
+              confidence = 50;
+              break;
+            }
+
+            try {
+              confidence = parseConfidence(confidenceInput);
+            } catch (promptError: any) {
+              process.stderr.write(`${promptError.message}\n`);
+            }
+          }
+
+          if (relatedFiles.length === 0) {
+            const relatedFilesInput = await ask('Enter related files (comma-separated, optional): ');
+            relatedFiles = normalizeRepeatedValues(relatedFilesInput);
+          }
+
+          if (!projectPath) {
+            const projectPathInput = await ask('Enter project path (optional, defaults to current repo): ');
+            projectPath = projectPathInput.trim();
+          }
         } finally {
           rl.close();
         }
@@ -535,7 +602,7 @@ program
       // 3. Validate presence of required fields (if not interactive)
       const missingFields: string[] = [];
       if (!title) missingFields.push('title');
-      if (!summary) missingFields.push('summary');
+      if (!content) missingFields.push('content');
       if (!category) missingFields.push('category');
       if (!source) missingFields.push('source');
 
@@ -543,20 +610,17 @@ program
         throw new Error(`Missing required fields: ${missingFields.join(', ')}`);
       }
 
-      // Parse tags and related files if provided
-      let tags: string[] = [];
-      if (options.tags) {
-        tags = options.tags.split(',').map((t: string) => t.trim()).filter(Boolean);
-        // Deduplicate tags
-        tags = Array.from(new Set(tags));
+      if (confidence === undefined) {
+        confidence = 50;
       }
 
-      let relatedFiles: string[] = [];
-      if (options.relatedFiles) {
-        relatedFiles = options.relatedFiles.split(',').map((f: string) => f.trim()).filter(Boolean);
-      }
+      const resolvedWorkspace = resolveWorkspaceRootForAdd(projectPath ?? '.');
 
-      const confidence = options.confidence !== undefined ? options.confidence : undefined;
+      // 2. Resolve database path relative to workspace root (SEC-001)
+      const dbFile = PathSanitizer.sanitizeSubPath(resolvedWorkspace, '.flash-mem/flashmem.sqlite');
+      if (!fs.existsSync(dbFile)) {
+        throw new Error(`No SQLite memory store found at "${dbFile}". Run "flash-mem init" first.`);
+      }
 
       // 4. Initialize Database and Services
       const db = createDatabaseConnection(dbFile);
@@ -582,7 +646,7 @@ program
         const entry = memoryEntryService.createMemoryEntry({
           projectId: project.id,
           title,
-          content: summary,
+          content,
           category: category as any,
           source,
           tags,
@@ -597,19 +661,7 @@ program
         if (useJson) {
           await writeStdout(JSON.stringify({
             success: true,
-            id: entry.id,
-            entry: {
-              id: entry.id,
-              title: entry.title,
-              content: entry.content,
-              category: entry.category,
-              source: entry.source,
-              tags: tags,
-              confidence: entry.confidence,
-              relatedFiles: entry.relatedFiles,
-              createdAt: entry.createdAt,
-              updatedAt: entry.updatedAt
-            }
+            id: entry.id
           }, null, 2) + '\n');
         } else {
           await writeStdout(`Memory entry added successfully! ID: ${entry.id}\n`);
@@ -627,7 +679,8 @@ program
       if (useJson) {
         await writeStdout(JSON.stringify({
           success: false,
-          error: errMsg
+          error: errMsg,
+          details: [errMsg]
         }, null, 2) + '\n');
       }
       process.exitCode = 1;
