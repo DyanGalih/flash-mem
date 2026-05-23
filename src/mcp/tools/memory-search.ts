@@ -15,7 +15,7 @@ export const memorySearchInputSchema = z.object({
 
 export function createMemorySearchTool(service: MemorySearchService) {
   return {
-    name: 'memory.search',
+    name: 'memory_search',
     schema: memorySearchInputSchema,
     execute: (input: z.infer<typeof memorySearchInputSchema>) => service.search(input)
   };

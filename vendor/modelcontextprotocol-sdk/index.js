@@ -42,13 +42,14 @@ class Server {
     }
 
     if (request.method === 'tools/list') {
+      const { zodToJsonSchema } = require('zod-to-json-schema');
       return {
         jsonrpc: '2.0',
         id: request.id,
         result: {
           tools: this.listTools().map((tool) => ({
             name: tool.name,
-            schema: tool.schema
+            inputSchema: zodToJsonSchema(tool.schema)
           }))
         }
       };

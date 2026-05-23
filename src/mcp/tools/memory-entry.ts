@@ -13,7 +13,7 @@ export const updateMemoryEntryInputSchema = MemoryEntryInputSchema.partial().ext
 
 export function createMemoryEntryTool(service: MemoryEntryService) {
   return {
-    name: 'memory-entry.create',
+    name: 'memory_entry_create',
     schema: createMemoryEntryInputSchema,
     execute: (input: z.infer<typeof createMemoryEntryInputSchema>) => service.createMemoryEntry(input)
   };
@@ -21,7 +21,7 @@ export function createMemoryEntryTool(service: MemoryEntryService) {
 
 export function updateMemoryEntryTool(service: MemoryEntryService) {
   return {
-    name: 'memory-entry.update',
+    name: 'memory_entry_update',
     schema: updateMemoryEntryInputSchema,
     execute: (input: z.infer<typeof updateMemoryEntryInputSchema> & { entryId: string }) => service.updateMemoryEntry(input.entryId, input)
   };

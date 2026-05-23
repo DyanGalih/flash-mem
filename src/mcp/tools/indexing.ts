@@ -15,7 +15,7 @@ export const indexingInputSchema = z.object({
 
 export function createIndexingTool(service: IndexingService) {
   return {
-    name: 'memory.index',
+    name: 'memory_index',
     schema: indexingInputSchema,
     execute: (input: z.infer<typeof indexingInputSchema>) => service.indexSources(input.projectId, input.sources)
   };
