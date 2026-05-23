@@ -60,8 +60,20 @@ VS Code extensions are designed to handle **multiple projects and multiple works
 
 **DO NOT define a workspace path in the `args` array!** By intentionally omitting the `/path/to/your/workspace` argument, `flash-mem` will automatically inherit the current working directory from the extension. This allows a single MCP configuration to seamlessly manage `.flash-mem` memory databases across all your different projects without any manual adjustments.
 
-Add the following to your extension's MCP configuration file (e.g., `mcp_settings.json`):
+Depending on your specific extension, add the following to your MCP configuration file:
 
+**For extensions using TOML (e.g., Antigravity):**
+```toml
+[mcp_servers.flash_mem]
+command = "node"
+args = [
+  "/absolute/path/to/flash-mem/dist/infrastructure/cli/index.js",
+  "mcp"
+]
+enabled = true
+```
+
+**For extensions using JSON (e.g., Cline, Roo Code):**
 ```json
 {
   "mcpServers": {
