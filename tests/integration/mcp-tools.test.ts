@@ -97,7 +97,8 @@ describe('MCP Server Foundation', () => {
       }
     });
 
-    expect(callResponse.result).toHaveProperty('title', 'SDK-backed entry');
+    const callPayload = JSON.parse((callResponse.result as any).content[0].text);
+    expect(callPayload).toHaveProperty('title', 'SDK-backed entry');
   });
 
   it('supports update_memory tool with PATCH semantics and null clearing', async () => {
@@ -123,9 +124,10 @@ describe('MCP Server Foundation', () => {
       }
     })) as any;
 
-    const entryId = addResponse.result.id;
-    expect(addResponse.result.confidence).toBe(80);
-    expect(addResponse.result.relatedFiles).toEqual(['src/a.ts']);
+    const addPayload = JSON.parse((addResponse.result as any).content[0].text);
+    const entryId = addPayload.id;
+    expect(addPayload.confidence).toBe(80);
+    expect(addPayload.relatedFiles).toEqual(['src/a.ts']);
 
     // 2. Update (Patch) with confidence = 95, related_files = null
     const updateResponse = (await server.handleRequest({
@@ -142,9 +144,10 @@ describe('MCP Server Foundation', () => {
       }
     })) as any;
 
-    expect(updateResponse.result.confidence).toBe(95);
-    expect(updateResponse.result.relatedFiles).toBeNull();
-    expect(updateResponse.result.title).toBe('Patch me'); // original title is retained
+    const updatePayload = JSON.parse((updateResponse.result as any).content[0].text);
+    expect(updatePayload.confidence).toBe(95);
+    expect(updatePayload.relatedFiles).toBeNull();
+    expect(updatePayload.title).toBe('Patch me'); // original title is retained
   });
 
   it('supports delete_memory tool with soft delete', async () => {
@@ -168,7 +171,8 @@ describe('MCP Server Foundation', () => {
       }
     })) as any;
 
-    const entryId = addResponse.result.id;
+    const addPayload = JSON.parse((addResponse.result as any).content[0].text);
+    const entryId = addPayload.id;
 
     // 2. Delete entry
     const deleteResponse = (await server.handleRequest({
@@ -183,8 +187,9 @@ describe('MCP Server Foundation', () => {
       }
     })) as any;
 
-    expect(deleteResponse.result).toHaveProperty('id', entryId);
-    expect(deleteResponse.result).toHaveProperty('deletedAt');
+    const deletePayload = JSON.parse((deleteResponse.result as any).content[0].text);
+    expect(deletePayload).toHaveProperty('id', entryId);
+    expect(deletePayload).toHaveProperty('deletedAt');
 
     // 3. Try to delete again (should throw error/fail)
     const deleteAgainResponse = (await server.handleRequest({
@@ -262,12 +267,9 @@ describe('MCP Server Foundation', () => {
     await serverPromise;
 
     const response = JSON.parse(chunks.join('').trim());
-    expect(response).toMatchObject({
-      jsonrpc: '2.0',
-      id: 3,
-      result: {
-        status: 'missing'
-      }
+    expect(response.result).toBeDefined();
+    expect(JSON.parse(response.result.content[0].text)).toMatchObject({
+      status: 'missing'
     });
     expect(errorChunks.join('')).toBe('');
   });
@@ -287,7 +289,7 @@ describe('MCP Server Foundation', () => {
     });
 
     expect(emptyResponse.error).toBeUndefined();
-    expect(emptyResponse.result).toMatchObject({
+    expect(JSON.parse((emptyResponse.result as any).content[0].text)).toMatchObject({
       status: 'missing'
     });
 
@@ -310,7 +312,7 @@ describe('MCP Server Foundation', () => {
     });
 
     expect(updateResponse.error).toBeUndefined();
-    expect(updateResponse.result).toMatchObject({
+    expect(JSON.parse((updateResponse.result as any).content[0].text)).toMatchObject({
       status: 'updated',
       project: expect.objectContaining({
         id: project.id
@@ -330,7 +332,7 @@ describe('MCP Server Foundation', () => {
       }
     });
 
-    expect(readyResponse.result).toMatchObject({
+    expect(JSON.parse((readyResponse.result as any).content[0].text)).toMatchObject({
       status: 'ready',
       project: expect.objectContaining({
         id: project.id
@@ -365,7 +367,7 @@ describe('MCP Server Foundation', () => {
     });
 
     expect(firstResponse.error).toBeUndefined();
-    expect(firstResponse.result).toMatchObject({
+    expect(JSON.parse((firstResponse.result as any).content[0].text)).toMatchObject({
       status: 'captured',
       artifactPath: 'specs/capture-target.md',
       sourceType: 'spec'
@@ -385,7 +387,7 @@ describe('MCP Server Foundation', () => {
     });
 
     expect(secondResponse.error).toBeUndefined();
-    expect(secondResponse.result).toMatchObject({
+    expect(JSON.parse((secondResponse.result as any).content[0].text)).toMatchObject({
       status: 'skipped',
       artifactPath: 'specs/capture-target.md',
       sourceType: 'spec'

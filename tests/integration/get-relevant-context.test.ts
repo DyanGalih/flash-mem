@@ -85,7 +85,7 @@ describe('get_relevant_context tool integration', () => {
     expect(response.error).toBeUndefined();
     expect(response.result).toBeDefined();
 
-    const result = response.result as any;
+    const result = JSON.parse((response.result as any).content[0].text);
     expect(result).toHaveProperty('project');
     expect(result.project).toHaveProperty('id', project.id);
     expect(result).toHaveProperty('query', 'JWT');

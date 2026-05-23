@@ -57,7 +57,7 @@ describe('Safety and Secret Filtering Integration', () => {
         id: 1,
         method: 'tools/call',
         params: {
-          name: 'memory.index',
+          name: 'memory_index',
           arguments: {
             projectId: project.id,
             sources: [
@@ -79,13 +79,14 @@ describe('Safety and Secret Filtering Integration', () => {
 
       expect(response.error).toBeUndefined();
       expect(response.result).toBeDefined();
-      expect(response.result.results).toHaveLength(1);
-      expect(response.result.results[0].entry).toBeDefined();
+      const payload = JSON.parse(response.result.content[0].text);
+      expect(payload.results).toHaveLength(1);
+      expect(payload.results[0].entry).toBeDefined();
 
       // Verify that warnings are returned in the response payload
-      expect(response.result.warnings).toBeDefined();
-      expect(response.result.warnings).toHaveLength(2);
-      expect(response.result.warnings).toEqual(expect.arrayContaining([
+      expect(payload.warnings).toBeDefined();
+      expect(payload.warnings).toHaveLength(2);
+      expect(payload.warnings).toEqual(expect.arrayContaining([
         expect.objectContaining({
           filePath: 'docs/credentials.md',
           line: 1,
@@ -136,9 +137,10 @@ describe('Safety and Secret Filtering Integration', () => {
 
       expect(response.error).toBeUndefined();
       expect(response.result).toBeDefined();
-      expect(response.result.warnings).toBeDefined();
-      expect(response.result.warnings).toHaveLength(1);
-      expect(response.result.warnings[0]).toEqual(expect.objectContaining({
+      const payload = JSON.parse(response.result.content[0].text);
+      expect(payload.warnings).toBeDefined();
+      expect(payload.warnings).toHaveLength(1);
+      expect(payload.warnings[0]).toEqual(expect.objectContaining({
         filePath: 'docs/secrets.md',
         line: 2,
         category: 'AWS Access Key'
