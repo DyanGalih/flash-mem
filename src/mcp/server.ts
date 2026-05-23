@@ -31,10 +31,8 @@ import { createExportMarkdownTool } from './tools/export-markdown';
 import { createGetProjectSummaryTool } from './tools/get-project-summary';
 import { createGetRelevantContextTool } from './tools/get-relevant-context';
 import { createIndexingTool } from './tools/indexing';
-import { createMemoryEntryTool, updateMemoryEntryTool } from './tools/memory-entry';
-import { createMemorySearchTool } from './tools/memory-search';
 import { createRebuildIndexTool } from './tools/rebuild-index';
-import { createRelationshipTool } from './tools/relationships';
+import { createAddMemoryRelationshipTool } from './tools/relationships';
 import { createSearchMemoryTool } from './tools/search-memory';
 import { createUpdateMemoryTool } from './tools/update-memory';
 import { createUpdateProjectSummaryTool } from './tools/update-project-summary';
@@ -44,6 +42,19 @@ export interface McpServerContext {
   db: Database.Database;
   workspaceRoot: string;
   summaryWriteAccessEnabled?: boolean;
+}
+
+type McpToolDefinition = {
+  name: string;
+  schema: unknown;
+  execute: (input: any) => unknown;
+};
+
+function createToolAlias<T extends McpToolDefinition>(tool: T, name: string): T {
+  return {
+    ...tool,
+    name
+  };
 }
 
 export function createMcpServer(context: McpServerContext) {
@@ -123,25 +134,47 @@ export function createMcpServer(context: McpServerContext) {
     version: '0.1.0'
   });
 
+  // Canonical workflow tools first.
+  const getProjectSummaryTool = createGetProjectSummaryTool(projectSummaryService);
+  const updateProjectSummaryTool = createUpdateProjectSummaryTool(projectSummaryService, {
+    canWriteProjectSummary: context.summaryWriteAccessEnabled === true
+  });
+  const searchMemoryTool = createSearchMemoryTool(memorySearchService);
+  const addMemoryTool = createAddMemoryTool(memoryEntryService);
+  const updateMemoryTool = createUpdateMemoryTool(memoryEntryService);
+  const addMemoryRelationshipTool = createAddMemoryRelationshipTool(memoryEntryService);
+  const rebuildIndexTool = createRebuildIndexTool(workspaceIndexingService);
+  const captureArtifactMemoryTool = createCaptureArtifactMemoryTool(artifactMemoryCaptureService);
+  const getRelevantContextTool = createGetRelevantContextTool(relevantContextService);
+  const deleteMemoryTool = createDeleteMemoryTool(memoryEntryService);
+  const exportMarkdownTool = createExportMarkdownTool(markdownExportService);
+  const indexingTool = createIndexingTool(indexingService);
+  const restoreBackupTool = createRestoreBackupTool(markdownRestoreService);
+
   server
-    .registerTool(createGetProjectSummaryTool(projectSummaryService))
-    .registerTool(createUpdateProjectSummaryTool(projectSummaryService, {
-      canWriteProjectSummary: context.summaryWriteAccessEnabled === true
-    }))
-    .registerTool(createSearchMemoryTool(memorySearchService))
-    .registerTool(createCaptureArtifactMemoryTool(artifactMemoryCaptureService))
-    .registerTool(createGetRelevantContextTool(relevantContextService))
-    .registerTool(createAddMemoryTool(memoryEntryService))
-    .registerTool(createUpdateMemoryTool(memoryEntryService))
-    .registerTool(createDeleteMemoryTool(memoryEntryService))
-    .registerTool(createExportMarkdownTool(markdownExportService))
-    .registerTool(createRebuildIndexTool(workspaceIndexingService))
-    .registerTool(createMemoryEntryTool(memoryEntryService))
-    .registerTool(updateMemoryEntryTool(memoryEntryService))
-    .registerTool(createMemorySearchTool(memorySearchService))
-    .registerTool(createRelationshipTool(memoryEntryService))
-    .registerTool(createIndexingTool(indexingService))
-    .registerTool(createRestoreBackupTool(markdownRestoreService));
+    .registerTool(getProjectSummaryTool)
+    .registerTool(updateProjectSummaryTool)
+    .registerTool(searchMemoryTool)
+    .registerTool(getRelevantContextTool)
+    .registerTool(addMemoryTool)
+    .registerTool(updateMemoryTool)
+    .registerTool(deleteMemoryTool)
+    .registerTool(captureArtifactMemoryTool)
+    .registerTool(exportMarkdownTool)
+    .registerTool(rebuildIndexTool)
+
+    // Compatibility aliases.
+    .registerTool(createToolAlias(getProjectSummaryTool, 'memory_project_summary_get'))
+    .registerTool(createToolAlias(updateProjectSummaryTool, 'memory_project_summary_update'))
+    .registerTool(createToolAlias(searchMemoryTool, 'memory_search'))
+    .registerTool(createToolAlias(addMemoryTool, 'memory_entry_create'))
+    .registerTool(createToolAlias(updateMemoryTool, 'memory_entry_update'))
+    .registerTool(createToolAlias(addMemoryRelationshipTool, 'memory_relationship_create'))
+
+    // Advanced / admin tools.
+    .registerTool(addMemoryRelationshipTool)
+    .registerTool(indexingTool)
+    .registerTool(restoreBackupTool);
 
   return server;
 }

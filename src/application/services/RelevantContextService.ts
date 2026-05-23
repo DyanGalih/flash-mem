@@ -11,6 +11,8 @@ export interface CompactMemoryEntry {
   confidence: number | null;
   isLowConfidence: boolean;
   source: string;
+  createdAt: number;
+  updatedAt: number;
 }
 
 export interface RelevantContextResult {
@@ -93,6 +95,7 @@ export class RelevantContextService {
         isLowConfidence: confidence < 60,
         source: relativeSource,
         score: match.score,
+        createdAt: match.createdAt,
         updatedAt: match.updatedAt
       };
     });
@@ -160,7 +163,9 @@ export class RelevantContextService {
           category: cand.category,
           confidence: cand.confidence,
           isLowConfidence: cand.isLowConfidence,
-          source: cand.source
+          source: cand.source,
+          createdAt: cand.createdAt,
+          updatedAt: cand.updatedAt
         });
       }
     }

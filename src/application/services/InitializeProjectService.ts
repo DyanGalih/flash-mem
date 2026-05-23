@@ -95,17 +95,64 @@ export class InitializeProjectService {
     };
   }
 
-  private writeAgentInstructions(resolvedRoot: string): void {
-    const instructionContent = `# Engineering Memory Protocol (flash-mem)
+  // Increment this version number whenever the agent instruction template changes.
+  // Existing files with an older version marker will be automatically updated.
+  private static readonly PROTOCOL_VERSION = 2;
+  private static readonly PROTOCOL_START_MARKER = '<!-- flash-mem-protocol-start';
+  private static readonly PROTOCOL_END_MARKER = '<!-- flash-mem-protocol-end -->';
 
-You have access to the \`flash-mem\` MCP server which provides engineering memory for this project.
+  /**
+   * Injects or updates the Engineering Memory Protocol block in all known agent
+   * instruction files. Safe to call on re-init: it replaces a stale versioned
+   * block without touching the surrounding content.
+   */
+  public writeAgentInstructions(resolvedRoot: string): { updated: string[]; skipped: string[] } {
+    const version = InitializeProjectService.PROTOCOL_VERSION;
+    const startMarker = `${InitializeProjectService.PROTOCOL_START_MARKER} v${version} -->`;
+    const endMarker = InitializeProjectService.PROTOCOL_END_MARKER;
 
-## Your Responsibilities:
-1. **Proactive Context Retrieval:** Before writing code, planning, or answering architectural questions, ALWAYS call \`memory_search\` or \`get_relevant_context\` to check for existing conventions or constraints.
-2. **Autonomous Memory Storage:** If you and the user establish a new rule, make an architectural decision, or fix a tricky bug, you MUST autonomously call \`add_memory\` to store it as a convention or finding. **Do not wait for the user to ask you to save it.**
-3. **Project Summary:** Keep the project's architectural high-level state up to date using \`update_project_summary\` if the structure of the project fundamentally changes.
+    const block = [
+      startMarker,
+      `# Engineering Memory Protocol (flash-mem)`,
+      ``,
+      `You are an AI agent working in a project backed by **flash-mem** — a durable engineering memory system.`,
+      ``,
+      `## Primary goal`,
+      `Store and retrieve stable project knowledge so agents can avoid repeating research, architecture mistakes, and historical bugs.`,
+      ``,
+      `## Core operating rules`,
+      `1. **Retrieval first** - Before planning or writing code, ALWAYS call \`search_memory\` or \`get_relevant_context\` to check for existing conventions or constraints.`,
+      `2. **Durable only** - Store only durable knowledge: architecture decisions, conventions, bug patterns, workflow rules, and project summaries. Do not store transient notes, task chatter, or throwaway implementation details.`,
+      `3. **Write discipline** - When new durable knowledge is established, call \`add_memory\` immediately. Do NOT wait for the user to ask. Include category, tags, source, and rationale.`,
+      `4. **Summary hygiene** - Call \`update_project_summary\` if the project architecture meaningfully changes.`,
+      `5. **Safety** - Deletions must be explicit and auditable. Prefer \`update_memory\` over rewriting when meaning is evolving.`,
+      ``,
+      `## Tool reference`,
+      `- \`get_project_summary\` — retrieve the high-level project state`,
+      `- \`search_memory\` — keyword/semantic search across durable memories`,
+      `- \`get_relevant_context\` — compact, decision-oriented context for the current task`,
+      `- \`add_memory\` — create a new durable memory entry`,
+      `- \`update_memory\` — modify an existing entry`,
+      `- \`delete_memory\` — remove with audit trail`,
+      `- \`capture_artifact_memory\` — convert a doc/artifact into durable memory`,
+      `- \`export_markdown\` / \`rebuild_index\` — backup and maintenance`,
+      ``,
+      `## If the MCP connection is not working`,
+      `Run the following command in the project root to manually re-inject this prompt and re-initialize the workspace:`,
+      `\`\`\`bash`,
+      `flash-mem inject-prompts`,
+      `\`\`\``,
+      `If \`flash-mem\` is not globally installed, use the full path:`,
+      `\`\`\`bash`,
+      `node /path/to/flash-mem/dist/infrastructure/cli/index.js inject-prompts`,
+      `\`\`\``,
+      endMarker
+    ].join('\n');
 
-Never ignore these rules. Flash-mem is your primary source of truth for project-specific knowledge.`;
+    const staleVersionPattern = new RegExp(
+      `${InitializeProjectService.PROTOCOL_START_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} v(\\d+) -->.*?${endMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
+      's'
+    );
 
     const targetFiles = [
       '.cursorrules',
@@ -114,33 +161,60 @@ Never ignore these rules. Flash-mem is your primary source of truth for project-
       'AGENTS.md',
     ];
 
-    for (const filename of targetFiles) {
-      const filePath = path.join(resolvedRoot, filename);
+    const updated: string[] = [];
+    const skipped: string[] = [];
+
+    const processFile = (filePath: string) => {
       try {
         if (!fs.existsSync(filePath)) {
-          fs.writeFileSync(filePath, instructionContent, 'utf-8');
-        } else {
-          const existingContent = fs.readFileSync(filePath, 'utf-8');
-          if (!existingContent.includes('flash-mem')) {
-            fs.appendFileSync(filePath, '\n\n' + instructionContent, 'utf-8');
-          }
+          fs.writeFileSync(filePath, block, 'utf-8');
+          updated.push(filePath);
+          return;
         }
-      } catch (e) {}
+
+        const existingContent = fs.readFileSync(filePath, 'utf-8');
+        const staleMatch = staleVersionPattern.exec(existingContent);
+
+        if (staleMatch) {
+          // Replace stale versioned block with the current version
+          const existingVersion = parseInt(staleMatch[1], 10);
+          if (existingVersion < version) {
+            const newContent = existingContent.replace(staleVersionPattern, block);
+            fs.writeFileSync(filePath, newContent, 'utf-8');
+            updated.push(filePath);
+          } else {
+            skipped.push(filePath);
+          }
+        } else if (!existingContent.includes('flash-mem')) {
+          // No flash-mem mention at all — append the block
+          const prefix = existingContent.length > 0 && !existingContent.endsWith('\n') ? '\n' : '';
+          fs.appendFileSync(filePath, prefix + '\n' + block, 'utf-8');
+          updated.push(filePath);
+        } else {
+          // Has flash-mem content but no version marker (pre-versioning install)
+          // Append a comment directing the user to run inject-prompts manually
+          const upgradeNote = `\n\n<!-- flash-mem: This file contains an unversioned flash-mem block from a previous install. Run \`flash-mem inject-prompts\` to upgrade to the latest protocol. -->`;
+          if (!existingContent.includes('flash-mem: This file contains an unversioned')) {
+            fs.appendFileSync(filePath, upgradeNote, 'utf-8');
+          }
+          skipped.push(filePath);
+        }
+      } catch (e) {
+        skipped.push(filePath);
+      }
+    };
+
+    for (const filename of targetFiles) {
+      processFile(path.join(resolvedRoot, filename));
     }
 
     const githubDir = path.join(resolvedRoot, '.github');
     try {
       fs.ensureDirSync(githubDir);
-      const copilotFile = path.join(githubDir, 'copilot-instructions.md');
-      if (!fs.existsSync(copilotFile)) {
-        fs.writeFileSync(copilotFile, instructionContent, 'utf-8');
-      } else {
-        const existingContent = fs.readFileSync(copilotFile, 'utf-8');
-        if (!existingContent.includes('flash-mem')) {
-          fs.appendFileSync(copilotFile, '\n\n' + instructionContent, 'utf-8');
-        }
-      }
+      processFile(path.join(githubDir, 'copilot-instructions.md'));
     } catch (e) {}
+
+    return { updated, skipped };
   }
 
   private setPermissions(targetPath: string, mode: number): void {

@@ -8,9 +8,9 @@ export const relationshipInputSchema = z.object({
   relationship: RelationshipInputSchema
 });
 
-export function createRelationshipTool(service: MemoryEntryService) {
+export function createAddMemoryRelationshipTool(service: MemoryEntryService) {
   return {
-    name: 'memory_relationship_create',
+    name: 'add_memory_relationship',
     schema: relationshipInputSchema,
     execute: (input: z.infer<typeof relationshipInputSchema>) => service.updateMemoryEntry(input.sourceEntryId, {
       relationships: [input.relationship]

@@ -221,12 +221,72 @@ program
   });
 
 program
+  .command('inject-prompts')
+  .description('Inject or upgrade the Engineering Memory Protocol into agent instruction files (ANTIGRAVITY.md, AGENTS.md, .cursorrules, CLINE.md, .github/copilot-instructions.md)')
+  .argument('[path]', 'The project path to inject into', '.')
+  .option('-j, --json', 'Output structured JSON instead of plain text')
+  .action(async (dirArg, options) => {
+    const useJson = !!options.json;
+
+    try {
+      const targetDir = path.resolve(process.cwd(), dirArg);
+
+      if (!fs.existsSync(targetDir) || !fs.statSync(targetDir).isDirectory()) {
+        throw new Error(`Path "${targetDir}" does not exist or is not a directory`);
+      }
+
+      const service = new InitializeProjectService();
+      const { updated, skipped } = service.writeAgentInstructions(targetDir);
+
+      if (useJson) {
+        await writeStdout(JSON.stringify({
+          success: true,
+          updated,
+          skipped
+        }, null, 2) + '\n');
+      } else {
+        if (updated.length > 0) {
+          await writeStdout(`Updated ${updated.length} file(s):\n`);
+          for (const f of updated) {
+            await writeStdout(`  ✓ ${path.relative(targetDir, f)}\n`);
+          }
+        }
+        if (skipped.length > 0) {
+          await writeStdout(`Skipped ${skipped.length} file(s) (already up to date or unversioned):\n`);
+          for (const f of skipped) {
+            await writeStdout(`  - ${path.relative(targetDir, f)}\n`);
+          }
+        }
+        if (updated.length === 0 && skipped.length === 0) {
+          await writeStdout('No agent instruction files found or created.\n');
+        }
+      }
+
+      process.exitCode = 0;
+      return;
+    } catch (err: any) {
+      const errMsg = err.message || 'Unknown error occurred during prompt injection';
+      await writeStderr(`Error: ${errMsg}\n`);
+
+      if (useJson) {
+        await writeStdout(JSON.stringify({
+          success: false,
+          error: errMsg
+        }, null, 2) + '\n');
+      }
+      process.exitCode = 1;
+      return;
+    }
+  });
+
+program
   .command('export')
   .description('Export markdown backups for the current workspace')
   .command('markdown')
   .argument('[path]', 'The workspace path to export', '.')
   .option('-j, --json', 'Output structured JSON instead of plain text')
   .action(async (dirArg, options) => {
+
     const useJson = !!options.json;
 
     try {
