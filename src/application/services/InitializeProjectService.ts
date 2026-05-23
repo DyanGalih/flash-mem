@@ -116,11 +116,16 @@ Never ignore these rules. Flash-mem is your primary source of truth for project-
 
     for (const filename of targetFiles) {
       const filePath = path.join(resolvedRoot, filename);
-      if (!fs.existsSync(filePath)) {
-        try {
+      try {
+        if (!fs.existsSync(filePath)) {
           fs.writeFileSync(filePath, instructionContent, 'utf-8');
-        } catch (e) {}
-      }
+        } else {
+          const existingContent = fs.readFileSync(filePath, 'utf-8');
+          if (!existingContent.includes('flash-mem')) {
+            fs.appendFileSync(filePath, '\n\n' + instructionContent, 'utf-8');
+          }
+        }
+      } catch (e) {}
     }
 
     const githubDir = path.join(resolvedRoot, '.github');
@@ -129,6 +134,11 @@ Never ignore these rules. Flash-mem is your primary source of truth for project-
       const copilotFile = path.join(githubDir, 'copilot-instructions.md');
       if (!fs.existsSync(copilotFile)) {
         fs.writeFileSync(copilotFile, instructionContent, 'utf-8');
+      } else {
+        const existingContent = fs.readFileSync(copilotFile, 'utf-8');
+        if (!existingContent.includes('flash-mem')) {
+          fs.appendFileSync(copilotFile, '\n\n' + instructionContent, 'utf-8');
+        }
       }
     } catch (e) {}
   }
