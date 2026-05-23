@@ -85,11 +85,52 @@ export class InitializeProjectService {
       this.updateGitignore(gitignorePath);
     }
 
+    // 6. Automatically drop agent instruction files if they don't exist
+    this.writeAgentInstructions(resolvedRoot);
+
     return {
       success: true,
       path: flashMemDir,
       metadata
     };
+  }
+
+  private writeAgentInstructions(resolvedRoot: string): void {
+    const instructionContent = `# Engineering Memory Protocol (flash-mem)
+
+You have access to the \`flash-mem\` MCP server which provides engineering memory for this project.
+
+## Your Responsibilities:
+1. **Proactive Context Retrieval:** Before writing code, planning, or answering architectural questions, ALWAYS call \`memory_search\` or \`get_relevant_context\` to check for existing conventions or constraints.
+2. **Autonomous Memory Storage:** If you and the user establish a new rule, make an architectural decision, or fix a tricky bug, you MUST autonomously call \`add_memory\` to store it as a convention or finding. **Do not wait for the user to ask you to save it.**
+3. **Project Summary:** Keep the project's architectural high-level state up to date using \`update_project_summary\` if the structure of the project fundamentally changes.
+
+Never ignore these rules. Flash-mem is your primary source of truth for project-specific knowledge.`;
+
+    const targetFiles = [
+      '.cursorrules',
+      'CLINE.md',
+      'ANTIGRAVITY.md',
+      'AGENTS.md',
+    ];
+
+    for (const filename of targetFiles) {
+      const filePath = path.join(resolvedRoot, filename);
+      if (!fs.existsSync(filePath)) {
+        try {
+          fs.writeFileSync(filePath, instructionContent, 'utf-8');
+        } catch (e) {}
+      }
+    }
+
+    const githubDir = path.join(resolvedRoot, '.github');
+    try {
+      fs.ensureDirSync(githubDir);
+      const copilotFile = path.join(githubDir, 'copilot-instructions.md');
+      if (!fs.existsSync(copilotFile)) {
+        fs.writeFileSync(copilotFile, instructionContent, 'utf-8');
+      }
+    } catch (e) {}
   }
 
   private setPermissions(targetPath: string, mode: number): void {
