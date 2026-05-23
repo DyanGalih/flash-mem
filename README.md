@@ -1,5 +1,10 @@
 # flash-mem
 
+[![npm version](https://img.shields.io/npm/v/flash-mem.svg)](https://www.npmjs.com/package/flash-mem)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![smithery badge](https://smithery.ai/badge/flash-mem)](https://smithery.ai/server/flash-mem)
+[![Made with ❤️ in Indonesia](https://img.shields.io/badge/Made_with_%E2%9D%A4%EF%B8%8F_in-Indonesia-red.svg)](https://github.com/galih/flash-mem)
+
 A local-first engineering memory server and CLI tool designed for developers and AI agents. It stores key engineering knowledge, architectural decisions, and project conventions to enable context-aware coding and knowledge reuse.
 
 ## Installation
@@ -91,7 +96,19 @@ enabled = true
 }
 ```
 
-*Note: Starting the MCP server in a new directory will automatically initialize a `.flash-mem` workspace for that specific project. You do not need to run any initialization commands manually.*
+### Troubleshooting Automatic Initialization
+
+By default, starting the MCP server in a new directory will automatically initialize a `.flash-mem` workspace for that specific project and inject the necessary Agent System Prompts (`.cursorrules`, `ANTIGRAVITY.md`, etc.). You generally do not need to run any initialization commands manually.
+
+However, if you open a project (especially in a Remote SSH workspace) and the `.flash-mem` folder and instruction files are not created automatically, it means your IDE's MCP client failed to boot the server in the background (often because `node` isn't in the extension's `PATH` or the remote extension is misconfigured). 
+
+In this case, you should initialize the project manually. Simply open the terminal in your workspace and run:
+
+```bash
+flash-mem init
+```
+
+This will instantly create the database and safely weave the necessary AI instruction files into your workspace to ensure your agent proactively uses the memory engine.
 
 
 ## Security & Safety Features
