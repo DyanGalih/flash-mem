@@ -5,6 +5,7 @@ import * as path from 'path';
 import { ArtifactMemoryCaptureService } from '../application/services/ArtifactMemoryCaptureService';
 import { IndexingService } from '../application/services/IndexingService';
 import { MarkdownExportService } from '../application/services/MarkdownExportService';
+import { MarkdownRestoreService } from '../application/services/MarkdownRestoreService';
 import { MemoryEntryService } from '../application/services/MemoryEntryService';
 import { MemorySearchService } from '../application/services/MemorySearchService';
 import { ProjectSummaryService } from '../application/services/ProjectSummaryService';
@@ -37,6 +38,7 @@ import { createRelationshipTool } from './tools/relationships';
 import { createSearchMemoryTool } from './tools/search-memory';
 import { createUpdateMemoryTool } from './tools/update-memory';
 import { createUpdateProjectSummaryTool } from './tools/update-project-summary';
+import { createRestoreBackupTool } from './tools/restore-backup';
 
 export interface McpServerContext {
   db: Database.Database;
@@ -93,6 +95,15 @@ export function createMcpServer(context: McpServerContext) {
     sourceDocumentRepository,
     schemaMigrationService
   );
+  const markdownRestoreService = new MarkdownRestoreService(
+    projectRepository,
+    memoryEntryRepository,
+    tagRepository,
+    relationshipRepository,
+    sourceDocumentRepository,
+    schemaMigrationService,
+    transactionRunner
+  );
   const projectSummaryService = new ProjectSummaryService(
     workspaceProject.id,
     projectRepository,
@@ -129,7 +140,8 @@ export function createMcpServer(context: McpServerContext) {
     .registerTool(updateMemoryEntryTool(memoryEntryService))
     .registerTool(createMemorySearchTool(memorySearchService))
     .registerTool(createRelationshipTool(memoryEntryService))
-    .registerTool(createIndexingTool(indexingService));
+    .registerTool(createIndexingTool(indexingService))
+    .registerTool(createRestoreBackupTool(markdownRestoreService));
 
   return server;
 }

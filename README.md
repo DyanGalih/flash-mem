@@ -51,6 +51,8 @@ To use `flash-mem` as an MCP server with tools like Claude Desktop, add the foll
 
 Replace `/path/to/flash-mem/` with the absolute path to your cloned repository, and `/path/to/your/default/workspace` with the directory you want to manage.
 
+*Note: Starting the MCP server will automatically initialize a `.flash-mem` workspace in the specified directory if one does not already exist. You do not need to run `flash-mem init` manually.*
+
 ## CLI Commands
 
 ### 1. Initialize Workspace

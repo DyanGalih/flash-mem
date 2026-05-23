@@ -775,7 +775,8 @@ program
 
       const dbFile = PathSanitizer.sanitizeSubPath(workspaceRoot, '.flash-mem/flashmem.sqlite');
       if (!fs.existsSync(dbFile)) {
-        throw new Error(`No SQLite memory store found at "${dbFile}". Run "flash-mem init" first.`);
+        const initService = new InitializeProjectService();
+        initService.execute(workspaceRoot);
       }
 
       const db = createDatabaseConnection(dbFile);
