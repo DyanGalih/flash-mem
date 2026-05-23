@@ -4,9 +4,52 @@ A local-first engineering memory server and CLI tool designed for developers and
 
 ## Installation
 
+### Global Installation
 ```bash
 npm install -g flash-mem
 ```
+
+### Development Setup (from source)
+1. Clone the repository and install dependencies:
+```bash
+git clone https://github.com/galih/flash-mem.git
+cd flash-mem
+npm install
+```
+
+2. Build the project:
+```bash
+npm run build
+```
+
+3. Link the package globally for development:
+```bash
+npm link
+```
+
+## MCP Configuration
+
+To use `flash-mem` as an MCP server with tools like Claude Desktop, add the following to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "flash-mem": {
+      "command": "node",
+      "args": [
+        "/path/to/flash-mem/dist/infrastructure/cli/index.js",
+        "mcp",
+        "/path/to/your/default/workspace"
+      ],
+      "env": {
+        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
+      }
+    }
+  }
+}
+```
+
+Replace `/path/to/flash-mem/` with the absolute path to your cloned repository, and `/path/to/your/default/workspace` with the directory you want to manage.
 
 ## CLI Commands
 

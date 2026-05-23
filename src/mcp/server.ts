@@ -1,7 +1,8 @@
-import * as path from 'path';
-import * as readline from 'node:readline';
-import Database from 'better-sqlite3';
 import { Server } from '@modelcontextprotocol/sdk';
+import Database from 'better-sqlite3';
+import * as readline from 'node:readline';
+import * as path from 'path';
+import { ArtifactMemoryCaptureService } from '../application/services/ArtifactMemoryCaptureService';
 import { IndexingService } from '../application/services/IndexingService';
 import { MarkdownExportService } from '../application/services/MarkdownExportService';
 import { MemoryEntryService } from '../application/services/MemoryEntryService';
@@ -10,27 +11,32 @@ import { ProjectSummaryService } from '../application/services/ProjectSummarySer
 import { RelevantContextService } from '../application/services/RelevantContextService';
 import { SchemaMigrationService } from '../application/services/SchemaMigrationService';
 import { WorkspaceIndexingService } from '../application/services/WorkspaceIndexingService';
-import { ProjectRepository } from '../infrastructure/database/repositories/ProjectRepository';
-import { ProjectSummaryRepository } from '../infrastructure/database/repositories/ProjectSummaryRepository';
-import { SourceDocumentRepository } from '../infrastructure/database/repositories/SourceDocumentRepository';
 import { IndexingRunRepository } from '../infrastructure/database/repositories/IndexingRunRepository';
 import { MemoryEntryRepository } from '../infrastructure/database/repositories/MemoryEntryRepository';
+import { ProjectRepository } from '../infrastructure/database/repositories/ProjectRepository';
+import { ProjectSummaryRepository } from '../infrastructure/database/repositories/ProjectSummaryRepository';
 import { RelationshipRepository } from '../infrastructure/database/repositories/RelationshipRepository';
+import { SourceDocumentRepository } from '../infrastructure/database/repositories/SourceDocumentRepository';
 import { TagRepository } from '../infrastructure/database/repositories/TagRepository';
 import { SqliteTransactionRunner } from '../infrastructure/database/SqliteTransactionRunner';
+import { ArtifactReader } from '../infrastructure/markdown/ArtifactReader';
+import { CaptureDeduplicationGuard } from '../infrastructure/safety/CaptureDeduplicationGuard';
+import { PathSanitizer } from '../infrastructure/safety/PathSanitizer';
+import { SecretScanner } from '../infrastructure/safety/SecretScanner';
 import { createAddMemoryTool } from './tools/add-memory';
-import { createUpdateMemoryTool } from './tools/update-memory';
+import { createCaptureArtifactMemoryTool } from './tools/capture-artifact-memory';
 import { createDeleteMemoryTool } from './tools/delete-memory';
 import { createExportMarkdownTool } from './tools/export-markdown';
 import { createGetProjectSummaryTool } from './tools/get-project-summary';
-import { createUpdateProjectSummaryTool } from './tools/update-project-summary';
 import { createGetRelevantContextTool } from './tools/get-relevant-context';
+import { createIndexingTool } from './tools/indexing';
 import { createMemoryEntryTool, updateMemoryEntryTool } from './tools/memory-entry';
 import { createMemorySearchTool } from './tools/memory-search';
-import { createRelationshipTool } from './tools/relationships';
 import { createRebuildIndexTool } from './tools/rebuild-index';
+import { createRelationshipTool } from './tools/relationships';
 import { createSearchMemoryTool } from './tools/search-memory';
-import { createIndexingTool } from './tools/indexing';
+import { createUpdateMemoryTool } from './tools/update-memory';
+import { createUpdateProjectSummaryTool } from './tools/update-project-summary';
 
 export interface McpServerContext {
   db: Database.Database;
@@ -59,6 +65,17 @@ export function createMcpServer(context: McpServerContext) {
   );
   const memorySearchService = new MemorySearchService(memoryEntryRepository, tagRepository, projectRepository);
   const schemaMigrationService = new SchemaMigrationService(context.db);
+  const artifactMemoryCaptureService = new ArtifactMemoryCaptureService(
+    context.workspaceRoot,
+    projectRepository,
+    memoryEntryRepository,
+    sourceDocumentRepository,
+    transactionRunner,
+    new ArtifactReader(),
+    { resolveRoot: (root) => PathSanitizer.resolveRoot(root) },
+    { redact: (value) => SecretScanner.redact(value) },
+    new CaptureDeduplicationGuard()
+  );
 
   const indexingService = new IndexingService(
     projectRepository,
@@ -101,6 +118,7 @@ export function createMcpServer(context: McpServerContext) {
       canWriteProjectSummary: context.summaryWriteAccessEnabled === true
     }))
     .registerTool(createSearchMemoryTool(memorySearchService))
+    .registerTool(createCaptureArtifactMemoryTool(artifactMemoryCaptureService))
     .registerTool(createGetRelevantContextTool(relevantContextService))
     .registerTool(createAddMemoryTool(memoryEntryService))
     .registerTool(createUpdateMemoryTool(memoryEntryService))

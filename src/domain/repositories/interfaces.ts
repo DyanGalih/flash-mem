@@ -80,3 +80,19 @@ export interface IIndexingRunRepository {
   createRun(projectId: string, schemaVersion: string, sourceCount?: number): IndexingRun;
   finishRun(runId: string, status: IndexingRun['status'], entryCount: number, errorMessage?: string | null): void;
 }
+
+export interface IArtifactReader {
+  read(workspaceRoot: string, artifactPath: string): { relativePath: string; content: string };
+}
+
+export interface ISecretScanner {
+  redact(value: string): string;
+}
+
+export interface IPathSanitizer {
+  resolveRoot(workspaceRoot: string): string;
+}
+
+export interface ICaptureDeduplicationGuard {
+  signature(input: { title: string; content: string; category: string }): string;
+}

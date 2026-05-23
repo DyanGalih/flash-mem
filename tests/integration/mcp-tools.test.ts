@@ -1,10 +1,10 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs-extra';
-import * as path from 'path';
-import { PassThrough } from 'node:stream';
 import { performance } from 'node:perf_hooks';
-import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
+import { PassThrough } from 'node:stream';
+import * as path from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
+import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
 import { createMcpServer, startMcpServer } from '../../src/mcp/server';
 
@@ -36,6 +36,7 @@ describe('MCP Server Foundation', () => {
       'update_project_summary',
       'search_memory',
       'get_relevant_context',
+      'capture_artifact_memory',
       'add_memory',
       'export_markdown',
       'rebuild_index'
@@ -54,6 +55,7 @@ describe('MCP Server Foundation', () => {
       'update_project_summary',
       'search_memory',
       'get_relevant_context',
+      'capture_artifact_memory',
       'add_memory',
       'export_markdown',
       'rebuild_index'
@@ -336,6 +338,57 @@ describe('MCP Server Foundation', () => {
       summary: expect.objectContaining({
         projectName: 'mcp-tools-workspace'
       })
+    });
+  });
+
+  it('captures reusable knowledge from markdown artifacts and skips duplicates', async () => {
+    const server = createMcpServer({ db, workspaceRoot });
+    const artifactPath = path.join(workspaceRoot, 'specs', 'capture-target.md');
+    fs.ensureDirSync(path.dirname(artifactPath));
+    fs.writeFileSync(
+      artifactPath,
+      '# Prompt Capture\n\nKeep the MCP boundary thin.\n\n- Redact secrets before persistence.\n- Avoid duplicate storage.',
+      'utf-8'
+    );
+
+    const firstResponse = await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 50,
+      method: 'tools/call',
+      params: {
+        name: 'capture_artifact_memory',
+        arguments: {
+          artifactPath: 'specs/capture-target.md',
+          sourceType: 'spec'
+        }
+      }
+    });
+
+    expect(firstResponse.error).toBeUndefined();
+    expect(firstResponse.result).toMatchObject({
+      status: 'captured',
+      artifactPath: 'specs/capture-target.md',
+      sourceType: 'spec'
+    });
+
+    const secondResponse = await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 51,
+      method: 'tools/call',
+      params: {
+        name: 'capture_artifact_memory',
+        arguments: {
+          artifactPath: 'specs/capture-target.md',
+          sourceType: 'spec'
+        }
+      }
+    });
+
+    expect(secondResponse.error).toBeUndefined();
+    expect(secondResponse.result).toMatchObject({
+      status: 'skipped',
+      artifactPath: 'specs/capture-target.md',
+      sourceType: 'spec'
     });
   });
 
