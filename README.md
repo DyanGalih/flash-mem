@@ -62,7 +62,7 @@ VS Code extensions are designed to handle **multiple projects and multiple works
 
 Depending on your specific extension, add the following to your MCP configuration file:
 
-**For extensions using TOML (e.g., Antigravity):**
+**For extensions using TOML (e.g., Codex):**
 ```toml
 [mcp_servers.flash_mem]
 command = "node"
@@ -73,7 +73,7 @@ args = [
 enabled = true
 ```
 
-**For extensions using JSON (e.g., Cline, Roo Code):**
+**For extensions using JSON (e.g., Antigravity, Cline, Roo Code):**
 ```json
 {
   "mcpServers": {
