@@ -56,7 +56,9 @@ To use `flash-mem` with Claude Desktop, add the following to your `claude_deskto
 
 ### 2. VS Code Extensions (Antigravity, Cline, Roo Code, Codex)
 
-VS Code extensions are designed to handle **multiple projects and multiple workspaces**. To allow the extension to dynamically target the active project, **omit the hardcoded workspace path**. `flash-mem` will automatically default to the extension's current working directory.
+VS Code extensions are designed to handle **multiple projects and multiple workspaces**. 
+
+**DO NOT define a workspace path in the `args` array!** By intentionally omitting the `/path/to/your/workspace` argument, `flash-mem` will automatically inherit the current working directory from the extension. This allows a single MCP configuration to seamlessly manage `.flash-mem` memory databases across all your different projects without any manual adjustments.
 
 Add the following to your extension's MCP configuration file (e.g., `mcp_settings.json`):
 
