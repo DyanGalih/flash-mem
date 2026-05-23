@@ -29,7 +29,11 @@ npm link
 
 ## MCP Configuration
 
-To use `flash-mem` as an MCP server with tools like Claude Desktop, add the following to your `claude_desktop_config.json`:
+`flash-mem` is fully compatible with standard Model Context Protocol (MCP) clients.
+
+### 1. Claude Desktop
+
+To use `flash-mem` with Claude Desktop, add the following to your `claude_desktop_config.json`:
 
 ```json
 {
@@ -48,10 +52,32 @@ To use `flash-mem` as an MCP server with tools like Claude Desktop, add the foll
   }
 }
 ```
+*Note: Replace the paths with your actual absolute paths. Supplying a specific workspace path makes Claude Desktop always target that directory.*
 
-Replace `/path/to/flash-mem/` with the absolute path to your cloned repository, and `/path/to/your/default/workspace` with the directory you want to manage.
+### 2. VS Code Extensions (Antigravity, Cline, Roo Code, Codex)
 
-*Note: Starting the MCP server will automatically initialize a `.flash-mem` workspace in the specified directory if one does not already exist. You do not need to run `flash-mem init` manually.*
+VS Code extensions are designed to handle **multiple projects and multiple workspaces**. To allow the extension to dynamically target the active project, **omit the hardcoded workspace path**. `flash-mem` will automatically default to the extension's current working directory.
+
+Add the following to your extension's MCP configuration file (e.g., `mcp_settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "flash-mem": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/flash-mem/dist/infrastructure/cli/index.js",
+        "mcp"
+      ],
+      "env": {
+        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
+      }
+    }
+  }
+}
+```
+
+*Note: Starting the MCP server in a new directory will automatically initialize a `.flash-mem` workspace for that specific project. You do not need to run any initialization commands manually.*
 
 
 ## Security & Safety Features
