@@ -24,6 +24,23 @@ class Server {
       return this.errorResponse(request?.id ?? null, -32600, 'Invalid Request');
     }
 
+    if (request.method === 'initialize') {
+      return {
+        jsonrpc: '2.0',
+        id: request.id,
+        result: {
+          protocolVersion: '2024-11-05',
+          capabilities: { tools: {} },
+          serverInfo: this.info
+        }
+      };
+    }
+
+    // Ignore notifications (they don't have an id)
+    if (!('id' in request)) {
+      return undefined;
+    }
+
     if (request.method === 'tools/list') {
       return {
         jsonrpc: '2.0',

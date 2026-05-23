@@ -174,7 +174,9 @@ export async function startMcpServer(context: McpServerContext, options: McpStdi
     try {
       const request = JSON.parse(trimmed);
       const response = await server.handleRequest(request);
-      writeResponse(response);
+      if (response !== undefined) {
+        writeResponse(response);
+      }
     } catch (err: any) {
       const message = err instanceof SyntaxError ? 'Parse error' : (err?.message ?? 'Internal error');
       if (!(err instanceof SyntaxError)) {
