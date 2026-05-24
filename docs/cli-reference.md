@@ -110,7 +110,44 @@ flash-mem restore-backup [path] [options]
 
 ---
 
-### 6. Start MCP Server
+### 6. Prepare Context
+
+Generate memory synthesis, doc synthesis, and a token report for a feature or workspace.
+
+```bash
+flash-mem prepare-context [path] [options]
+```
+
+**Options:**
+* `--feature <path>`: Feature path relative to the workspace root.
+* `--query <string>`: Override the synthesis query.
+* `--token-budget <number>`: Token budget for the memory synthesis output.
+* `--write`: Write `memory-synthesis.md` and `doc-synthesis.md` into the feature folder.
+* `-j, --json`: Output structured JSON.
+
+---
+
+### 7. Spec Kit-Compatible Helpers
+
+These commands are additive and opt-in:
+
+```bash
+flash-mem synthesize-memory [path] [options]
+flash-mem synthesize-docs [path] [options]
+flash-mem token-report [path] [options]
+flash-mem promote-lesson [options]
+flash-mem sync-shared [path] [options]
+```
+
+**Notes:**
+* `synthesize-memory` and `synthesize-docs` can write standalone artifacts with `--write`.
+* `token-report` shows a compact baseline/cached/saved token comparison.
+* `promote-lesson` stores an approved lesson in shared memory.
+* `sync-shared` writes the native `SHARED_LESSONS.md` file and a temporary review buffer at `docs/memory/SHARED_LESSONS.md`.
+
+---
+
+### 8. Start MCP Server
 
 Start the local MCP server over stdio to integrate with AI interfaces (such as Claude/Gemini).
 

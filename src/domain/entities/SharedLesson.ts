@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 export const SharedLessonSchema = z.object({
-  id: z.string().uuid(),
+  id: z.string().min(1),
   topic: z.string().min(1),
   lesson: z.string().min(1),
   framework: z.string().nullable(),

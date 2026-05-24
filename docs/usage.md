@@ -55,6 +55,15 @@ Important:
 - The current `rebuild-index` command scans markdown files (`.md`, `.markdown`) rather than every source file in the repository.
 - For code-heavy projects, pair it with targeted memory writes or MCP source indexing for the files you want the agent to remember.
 
+## Spec-Driven Development
+
+When you are moving from spec to plan to implementation, use the compatibility helpers to keep the workflow memory-first:
+
+1. Run `flash-mem prepare-context <workspace> --feature specs/<feature>` to generate a compact synthesis bundle.
+2. Review `memory-synthesis.md` and `doc-synthesis.md` before planning or task generation.
+3. Use `flash-mem token-report <workspace> --feature specs/<feature>` when you want a quick token budget comparison.
+4. Promote reusable lessons with `flash-mem promote-lesson` and sync them later with `flash-mem sync-shared`.
+
 ## Practical Rule
 
 - Greenfield: build memory as you design the system

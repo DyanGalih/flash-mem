@@ -143,6 +143,19 @@ export function initializeMemoryStoreSchema(db: Database.Database): void {
     `).run();
 
     db.prepare(`
+      CREATE TABLE IF NOT EXISTS shared_lessons (
+        id TEXT PRIMARY KEY,
+        topic TEXT NOT NULL,
+        lesson TEXT NOT NULL,
+        framework TEXT,
+        language TEXT,
+        source_project_hash TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL
+      )
+    `).run();
+
+    db.prepare(`
       CREATE TABLE IF NOT EXISTS schema_metadata (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL,
@@ -182,6 +195,9 @@ export function initializeMemoryStoreSchema(db: Database.Database): void {
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_relationships_target ON relationships(target_entry_id)`).run();
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_source_documents_project_path ON source_documents(project_id, path)`).run();
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_indexing_runs_project_started ON indexing_runs(project_id, started_at)`).run();
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_shared_lessons_framework ON shared_lessons(framework)`).run();
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_shared_lessons_language ON shared_lessons(language)`).run();
+    db.prepare(`CREATE INDEX IF NOT EXISTS idx_shared_lessons_topic ON shared_lessons(topic)`).run();
 
     db.prepare(`DROP VIEW IF EXISTS memory_entries_view`).run();
     db.prepare(`
@@ -221,6 +237,7 @@ export function isMemoryStoreInitialized(db: Database.Database): boolean {
     'relationships',
     'source_documents',
     'indexing_runs',
+    'shared_lessons',
     'schema_metadata',
     'entries',
     'entries_tags'

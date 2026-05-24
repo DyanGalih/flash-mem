@@ -51,11 +51,27 @@ describe('MCP Server Foundation', () => {
       'memory_entry_update',
       'memory_relationship_create'
     ]);
-    expect(toolNames.slice(16)).toEqual([
+    expect(toolNames.slice(16, 19)).toEqual([
       'add_memory_relationship',
       'memory_index',
       'restore_backup'
     ]);
+    expect(toolNames).toEqual(expect.arrayContaining([
+      'prepare_context',
+      'memory_synthesis',
+      'doc_synthesis',
+      'token_report',
+      'promote_shared_lesson',
+      'sync_shared_lessons',
+      'generate_memory_synthesis',
+      'generate_doc_synthesis',
+      'speckit_memory_search',
+      'speckit_memory_synthesize',
+      'speckit_memory_token_report',
+      'speckit_memory_share_lesson',
+      'speckit_memory_sync_shared',
+      'speckit_memory_init_project'
+    ]));
     expect(server.listTools()[0]).toHaveProperty('schema');
     expect(project.name).toBe('mcp-tools-workspace');
   });
@@ -468,6 +484,236 @@ describe('MCP Server Foundation', () => {
       artifactPath: 'specs/capture-target.md',
       sourceType: 'spec'
     });
+  });
+
+  it('prepares combined context through the compatibility layer', async () => {
+    const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
+    const server = createMcpServer({ db, workspaceRoot });
+    const featurePath = path.join(workspaceRoot, 'specs', 'feature-a');
+    fs.ensureDirSync(featurePath);
+    fs.writeFileSync(path.join(featurePath, 'spec.md'), '# Feature A\n\nMemory-first planning.', 'utf-8');
+
+    await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 60,
+      method: 'tools/call',
+      params: {
+        name: 'add_memory',
+        arguments: {
+          projectId: project.id,
+          title: 'Memory-first planning',
+          content: 'Search memory before plan generation.',
+          category: 'decision',
+          source: 'docs/spec.md'
+        }
+      }
+    });
+
+    const response = await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 61,
+      method: 'tools/call',
+      params: {
+        name: 'prepare_context',
+        arguments: {
+          workspaceRoot,
+          featurePath: 'specs/feature-a',
+          query: 'memory-first'
+        }
+      }
+    });
+
+    expect(response.error).toBeUndefined();
+    const payload = JSON.parse((response.result as any).content[0].text);
+    expect(payload).toMatchObject({
+      workspaceRoot,
+      featurePath: featurePath,
+      query: 'memory-first'
+    });
+    expect(payload).toHaveProperty('memorySynthesis');
+    expect(payload).toHaveProperty('docSynthesis');
+    expect(payload).toHaveProperty('tokenReport');
+  });
+
+  it('supports memory-hub-compatible speckit tool names with normalized arguments', async () => {
+    const server = createMcpServer({ db, workspaceRoot });
+
+    const initResponse = await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 70,
+      method: 'tools/call',
+      params: {
+        name: 'speckit_memory_init_project',
+        arguments: {
+          projectRoot: workspaceRoot,
+          language: 'typescript',
+          framework: 'nest'
+        }
+      }
+    });
+
+    expect(initResponse.error).toBeUndefined();
+    expect(JSON.parse((initResponse.result as any).content[0].text)).toMatchObject({
+      language: 'typescript',
+      framework: 'nest',
+      profileStatus: expect.any(String)
+    });
+    const initProfilePath = path.join(workspaceRoot, '.specify', 'extensions', 'memory-md', 'config.yml');
+    expect(fs.existsSync(initProfilePath)).toBe(true);
+    expect(fs.readFileSync(initProfilePath, 'utf-8')).toBe(
+      [
+        'project_profile:',
+        '  language: typescript',
+        '  framework: nest',
+        '  shared_memory:',
+        '    enabled: true',
+        '    sync_channels:',
+        '      - global',
+        '      - typescript',
+        '      - nest',
+        ''
+      ].join('\n')
+    );
+    expect(fs.existsSync(path.join(workspaceRoot, '.flash-mem'))).toBe(true);
+    expect(fs.existsSync(path.join(workspaceRoot, '.flash-mem', 'project-profile.json'))).toBe(true);
+
+    const featurePath = path.join(workspaceRoot, 'specs', 'feature-b');
+    fs.ensureDirSync(featurePath);
+    fs.writeFileSync(path.join(featurePath, 'spec.md'), '# Feature B\n\nMemory-hub compatibility.', 'utf-8');
+
+    const searchProject = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
+    await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 71,
+      method: 'tools/call',
+      params: {
+        name: 'add_memory',
+        arguments: {
+          projectId: searchProject.id,
+          title: 'Memory-hub compatibility',
+          content: 'Keep the compatibility layer additive.',
+          category: 'decision',
+          source: 'docs/compatibility.md'
+        }
+      }
+    });
+
+    const searchResponse = await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 72,
+      method: 'tools/call',
+      params: {
+        name: 'speckit_memory_search',
+        arguments: {
+          projectRoot: workspaceRoot,
+          query: 'compatibility'
+        }
+      }
+    });
+    expect(searchResponse.error).toBeUndefined();
+    expect(JSON.parse((searchResponse.result as any).content[0].text)).toMatchObject({
+      results: expect.arrayContaining([
+        expect.objectContaining({ title: 'Memory-hub compatibility' })
+      ])
+    });
+
+    const synthesizeResponse = await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 73,
+      method: 'tools/call',
+      params: {
+        name: 'speckit_memory_synthesize',
+        arguments: {
+          projectRoot: workspaceRoot,
+          feature: 'specs/feature-b',
+          query: 'compatibility'
+        }
+      }
+    });
+    expect(synthesizeResponse.error).toBeUndefined();
+    expect(JSON.parse((synthesizeResponse.result as any).content[0].text)).toHaveProperty('markdown');
+
+    const tokenReportResponse = await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 74,
+      method: 'tools/call',
+      params: {
+        name: 'speckit_memory_token_report',
+        arguments: {
+          projectRoot: workspaceRoot,
+          feature: 'specs/feature-b',
+          query: 'compatibility'
+        }
+      }
+    });
+    expect(tokenReportResponse.error).toBeUndefined();
+    expect(JSON.parse((tokenReportResponse.result as any).content[0].text)).toMatchObject({
+      workspaceRoot,
+      featurePath: path.join(workspaceRoot, 'specs', 'feature-b'),
+      query: 'compatibility',
+      tokenReport: expect.objectContaining({
+        baselineTokens: expect.any(Number),
+        cachedTokens: expect.any(Number),
+        savedTokens: expect.any(Number),
+        savedPercent: expect.any(Number),
+        baselineSources: expect.any(Array),
+        cachedArtifacts: ['memory-synthesis.md', 'doc-synthesis.md']
+      })
+    });
+
+    const shareLessonResponse = await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 75,
+      method: 'tools/call',
+      params: {
+        name: 'speckit_memory_share_lesson',
+        arguments: {
+          projectRoot: workspaceRoot,
+          id: 'lesson-compat-002',
+          title: 'Compatibility review',
+          content: 'Write the review buffer to docs/memory/SHARED_LESSONS.md.',
+          framework: 'nest',
+          language: 'typescript',
+          tags: ['review', 'compatibility']
+        }
+      }
+    });
+    expect(shareLessonResponse.error).toBeUndefined();
+    expect(JSON.parse((shareLessonResponse.result as any).content[0].text)).toMatchObject({
+      reference: expect.objectContaining({
+        id: 'lesson-compat-002',
+        title: 'Compatibility review',
+        language: 'typescript'
+      }),
+      sharedLesson: expect.objectContaining({
+        id: 'lesson-compat-002',
+        topic: 'Compatibility review'
+      })
+    });
+
+    const syncResponse = await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 76,
+      method: 'tools/call',
+      params: {
+        name: 'speckit_memory_sync_shared',
+        arguments: {
+          projectRoot: workspaceRoot,
+          framework: 'nest',
+          language: 'typescript',
+          limit: 5
+        }
+      }
+    });
+
+    expect(syncResponse.error).toBeUndefined();
+    const syncPayload = JSON.parse((syncResponse.result as any).content[0].text);
+    expect(syncPayload).toHaveProperty('reviewFilePath');
+    expect(syncPayload.reviewFilePath).toBe(path.join(workspaceRoot, 'docs', 'memory', 'SHARED_LESSONS.md'));
+    expect(fs.existsSync(syncPayload.reviewFilePath)).toBe(true);
+    expect(fs.readFileSync(syncPayload.reviewFilePath, 'utf-8')).toContain('# Shared Lessons Review Buffer');
+    expect(fs.readFileSync(syncPayload.reviewFilePath, 'utf-8')).toContain('Compatibility review');
+    expect(syncPayload.reviewMarkdown).toContain('Delete this file after review or after merging its useful lessons.');
   });
 
   it('rejects update_project_summary when write capability is disabled', async () => {

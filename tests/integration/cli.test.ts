@@ -281,6 +281,51 @@ describe('CLI Integration', () => {
     expect(fs.existsSync(path.join(testWorkspace, '.flash-mem/exports/decisions.md'))).toBe(true);
   });
 
+  it('should prepare combined context through the compatibility CLI', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+
+    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const db = createDatabaseConnection(dbFile);
+    try {
+      new SchemaMigrationService(db).ensureCurrentSchema();
+      const projectRepo = new ProjectRepository(db);
+      const project = projectRepo.upsertByRootPath(testWorkspace, 'test-workspace-cli');
+      new MemoryEntryService(
+        projectRepo,
+        new MemoryEntryRepository(db),
+        new TagRepository(db),
+        new RelationshipRepository(db),
+        new SourceDocumentRepository(db),
+        new SqliteTransactionRunner(db)
+      ).createMemoryEntry({
+        projectId: project.id,
+        title: 'Prepare context decision',
+        content: 'Generate memory synthesis before task planning.',
+        category: 'decision',
+        source: 'docs/decision.md'
+      });
+    } finally {
+      db.close();
+    }
+
+    const featurePath = path.join(testWorkspace, 'specs', 'feature-a');
+    fs.ensureDirSync(featurePath);
+    fs.writeFileSync(path.join(featurePath, 'spec.md'), '# Feature A\n\nMemory-first planning.', 'utf-8');
+
+    const { stdout, stderr } = await execAsync(
+      `node ${cliScript} prepare-context "${testWorkspace}" --feature "specs/feature-a" --json`
+    );
+
+    expect(stderr).toBe('');
+    const result = JSON.parse(stdout.trim());
+    expect(result.success).toBe(true);
+    expect(result.workspaceRoot).toBe(testWorkspace);
+    expect(result.query).toBe('feature-a');
+    expect(result.memorySynthesis).toHaveProperty('markdown');
+    expect(result.docSynthesis).toHaveProperty('markdown');
+    expect(result.tokenReport).toHaveProperty('baselineTokens');
+  });
+
   it('should output error JSON on stdout if collision occurs with --json option', async () => {
     // Create a regular file named .flash-mem
     fs.writeFileSync(path.join(testWorkspace, '.flash-mem'), 'colliding file');
@@ -295,6 +340,29 @@ describe('CLI Integration', () => {
       expect(result.success).toBe(false);
       expect(result.error).toContain('A regular file named ".flash-mem" already exists');
     }
+  });
+
+  it('should sync shared lessons into both the native and compatibility review files', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+
+    const promote = await execAsync(
+      `node ${cliScript} promote-lesson --workspace "${testWorkspace}" --topic "Compatibility review" --lesson "Write the review buffer to docs/memory/SHARED_LESSONS.md." --framework nest --language typescript --json`
+    );
+    expect(JSON.parse(promote.stdout.trim()).success).toBe(true);
+
+    const { stdout, stderr } = await execAsync(
+      `node ${cliScript} sync-shared "${testWorkspace}" --framework nest --language typescript --json`
+    );
+
+    expect(stderr).toBe('');
+    const result = JSON.parse(stdout.trim());
+    expect(result.success).toBe(true);
+    expect(result.filePath).toBe(path.join(testWorkspace, 'SHARED_LESSONS.md'));
+    expect(result.reviewFilePath).toBe(path.join(testWorkspace, 'docs', 'memory', 'SHARED_LESSONS.md'));
+    expect(fs.existsSync(result.filePath)).toBe(true);
+    expect(fs.existsSync(result.reviewFilePath)).toBe(true);
+    expect(fs.readFileSync(result.reviewFilePath, 'utf-8')).toContain('# Shared Lessons Review Buffer');
+    expect(fs.readFileSync(result.reviewFilePath, 'utf-8')).toContain('Compatibility review');
   });
   it('should refuse to rebuild index without --yes confirmation', async () => {
     // Initialize first

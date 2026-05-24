@@ -3,14 +3,19 @@ import Database from 'better-sqlite3';
 import * as readline from 'node:readline';
 import * as path from 'path';
 import { ArtifactMemoryCaptureService } from '../application/services/ArtifactMemoryCaptureService';
+import { DocSynthesisService } from '../application/services/DocSynthesisService';
 import { IndexingService } from '../application/services/IndexingService';
 import { MarkdownExportService } from '../application/services/MarkdownExportService';
 import { MarkdownRestoreService } from '../application/services/MarkdownRestoreService';
 import { MemoryEntryService } from '../application/services/MemoryEntryService';
+import { MemorySynthesisService } from '../application/services/MemorySynthesisService';
 import { MemorySearchService } from '../application/services/MemorySearchService';
 import { ProjectSummaryService } from '../application/services/ProjectSummaryService';
 import { RelevantContextService } from '../application/services/RelevantContextService';
 import { SchemaMigrationService } from '../application/services/SchemaMigrationService';
+import { SharedLessonService } from '../application/services/SharedLessonService';
+import { SpecKitCompatibilityService } from '../application/services/SpecKitCompatibilityService';
+import { TokenBudgetService } from '../application/services/TokenBudgetService';
 import { WorkspaceIndexingService } from '../application/services/WorkspaceIndexingService';
 import { IndexingRunRepository } from '../infrastructure/database/repositories/IndexingRunRepository';
 import { MemoryEntryRepository } from '../infrastructure/database/repositories/MemoryEntryRepository';
@@ -19,6 +24,7 @@ import { ProjectSummaryRepository } from '../infrastructure/database/repositorie
 import { RelationshipRepository } from '../infrastructure/database/repositories/RelationshipRepository';
 import { SourceDocumentRepository } from '../infrastructure/database/repositories/SourceDocumentRepository';
 import { TagRepository } from '../infrastructure/database/repositories/TagRepository';
+import { SharedLessonRepository } from '../infrastructure/database/repositories/SharedLessonRepository';
 import { SqliteTransactionRunner } from '../infrastructure/database/SqliteTransactionRunner';
 import { ArtifactReader } from '../infrastructure/markdown/ArtifactReader';
 import { CaptureDeduplicationGuard } from '../infrastructure/safety/CaptureDeduplicationGuard';
@@ -34,6 +40,20 @@ import { createIndexingTool } from './tools/indexing';
 import { createRebuildIndexTool } from './tools/rebuild-index';
 import { createAddMemoryRelationshipTool } from './tools/relationships';
 import { createSearchMemoryTool } from './tools/search-memory';
+import {
+  createDocSynthesisTool,
+  createMemorySynthesisTool,
+  createPrepareContextTool,
+  createPromoteSharedLessonTool,
+  createSpeckitMemoryInitProjectTool,
+  createSpeckitMemorySearchTool,
+  createSpeckitMemoryShareLessonTool,
+  createSpeckitMemorySyncSharedTool,
+  createSpeckitMemorySynthesizeTool,
+  createSpeckitMemoryTokenReportTool,
+  createSyncSharedLessonsTool,
+  createTokenReportTool
+} from './tools/SpecKitTools';
 import { createUpdateMemoryTool } from './tools/update-memory';
 import { createUpdateProjectSummaryTool } from './tools/update-project-summary';
 import { createRestoreBackupTool } from './tools/restore-backup';
@@ -124,6 +144,20 @@ export function createMcpServer(context: McpServerContext) {
     projectRepository,
     memorySearchService
   );
+  const memorySynthesisService = new MemorySynthesisService(
+    projectRepository,
+    projectSummaryService,
+    relevantContextService
+  );
+  const docSynthesisService = new DocSynthesisService();
+  const sharedLessonRepository = new SharedLessonRepository(context.db);
+  const sharedLessonService = new SharedLessonService(sharedLessonRepository);
+  const compatibilityService = new SpecKitCompatibilityService(
+    memorySynthesisService,
+    docSynthesisService,
+    sharedLessonService,
+    new TokenBudgetService()
+  );
   const workspaceIndexingService = new WorkspaceIndexingService(
     indexingService,
     projectRepository
@@ -150,6 +184,18 @@ export function createMcpServer(context: McpServerContext) {
   const exportMarkdownTool = createExportMarkdownTool(markdownExportService);
   const indexingTool = createIndexingTool(indexingService);
   const restoreBackupTool = createRestoreBackupTool(markdownRestoreService);
+  const prepareContextTool = createPrepareContextTool(compatibilityService, context.workspaceRoot);
+  const memorySynthesisCompatTool = createMemorySynthesisTool(memorySynthesisService, context.workspaceRoot);
+  const docSynthesisCompatTool = createDocSynthesisTool(docSynthesisService, context.workspaceRoot);
+  const tokenReportTool = createTokenReportTool(compatibilityService, context.workspaceRoot);
+  const promoteSharedLessonTool = createPromoteSharedLessonTool(compatibilityService, context.workspaceRoot);
+  const syncSharedLessonsTool = createSyncSharedLessonsTool(compatibilityService, context.workspaceRoot);
+  const initializeProjectTool = createSpeckitMemoryInitProjectTool(compatibilityService, context.workspaceRoot);
+  const speckitMemorySearchTool = createSpeckitMemorySearchTool(memorySearchService, projectRepository, context.workspaceRoot);
+  const speckitMemorySynthesizeTool = createSpeckitMemorySynthesizeTool(memorySynthesisService, context.workspaceRoot);
+  const speckitMemoryTokenReportTool = createSpeckitMemoryTokenReportTool(compatibilityService, context.workspaceRoot);
+  const speckitMemoryShareLessonTool = createSpeckitMemoryShareLessonTool(compatibilityService, context.workspaceRoot);
+  const speckitMemorySyncSharedTool = createSpeckitMemorySyncSharedTool(compatibilityService, context.workspaceRoot);
 
   server
     .registerTool(getProjectSummaryTool)
@@ -174,7 +220,25 @@ export function createMcpServer(context: McpServerContext) {
     // Advanced / admin tools.
     .registerTool(addMemoryRelationshipTool)
     .registerTool(indexingTool)
-    .registerTool(restoreBackupTool);
+    .registerTool(restoreBackupTool)
+
+    // Spec Kit compatibility tools.
+    .registerTool(prepareContextTool)
+    .registerTool(memorySynthesisCompatTool)
+    .registerTool(docSynthesisCompatTool)
+    .registerTool(tokenReportTool)
+    .registerTool(promoteSharedLessonTool)
+    .registerTool(syncSharedLessonsTool)
+    .registerTool(createToolAlias(memorySynthesisCompatTool, 'generate_memory_synthesis'))
+    .registerTool(createToolAlias(docSynthesisCompatTool, 'generate_doc_synthesis'))
+
+    // Memory-hub compatibility wrappers.
+    .registerTool(speckitMemorySearchTool)
+    .registerTool(speckitMemorySynthesizeTool)
+    .registerTool(speckitMemoryTokenReportTool)
+    .registerTool(speckitMemoryShareLessonTool)
+    .registerTool(speckitMemorySyncSharedTool)
+    .registerTool(initializeProjectTool);
 
   return server;
 }

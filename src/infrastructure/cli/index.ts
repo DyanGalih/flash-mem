@@ -4,24 +4,33 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as readline from 'readline';
 import { IndexingService } from '../../application/services/IndexingService';
+import { DocSynthesisService } from '../../application/services/DocSynthesisService';
 import {
   AGENT_INSTRUCTION_TARGETS,
   AgentInstructionTargetId,
   InitializeProjectService
 } from '../../application/services/InitializeProjectService';
+import { MemorySynthesisService } from '../../application/services/MemorySynthesisService';
 import { MarkdownExportService } from '../../application/services/MarkdownExportService';
 import { MarkdownRestoreService } from '../../application/services/MarkdownRestoreService';
 import { MemoryEntryService } from '../../application/services/MemoryEntryService';
 import { MemorySearchService } from '../../application/services/MemorySearchService';
+import { ProjectSummaryService } from '../../application/services/ProjectSummaryService';
+import { RelevantContextService } from '../../application/services/RelevantContextService';
 import { SchemaMigrationService } from '../../application/services/SchemaMigrationService';
+import { SharedLessonService } from '../../application/services/SharedLessonService';
+import { SpecKitCompatibilityService } from '../../application/services/SpecKitCompatibilityService';
+import { TokenBudgetService } from '../../application/services/TokenBudgetService';
 import { VALID_CATEGORIES } from '../../domain/entities/MemoryEntry';
 import { createDatabaseConnection } from '../../infrastructure/database/connection';
 import { IndexingRunRepository } from '../../infrastructure/database/repositories/IndexingRunRepository';
 import { MemoryEntryRepository } from '../../infrastructure/database/repositories/MemoryEntryRepository';
 import { ProjectRepository } from '../../infrastructure/database/repositories/ProjectRepository';
+import { ProjectSummaryRepository } from '../../infrastructure/database/repositories/ProjectSummaryRepository';
 import { RelationshipRepository } from '../../infrastructure/database/repositories/RelationshipRepository';
 import { SourceDocumentRepository } from '../../infrastructure/database/repositories/SourceDocumentRepository';
 import { TagRepository } from '../../infrastructure/database/repositories/TagRepository';
+import { SharedLessonRepository } from '../../infrastructure/database/repositories/SharedLessonRepository';
 import { SqliteTransactionRunner } from '../../infrastructure/database/SqliteTransactionRunner';
 import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
@@ -94,6 +103,88 @@ function parseConfidence(value: unknown): number | undefined {
   }
 
   return parsed;
+}
+
+interface WorkspaceCompatibilityBundle {
+  db: ReturnType<typeof createDatabaseConnection>;
+  project: ReturnType<ProjectRepository['upsertByRootPath']>;
+  compatibilityService: SpecKitCompatibilityService;
+  memorySynthesisService: MemorySynthesisService;
+  docSynthesisService: DocSynthesisService;
+  sharedLessonService: SharedLessonService;
+  tokenBudgetService: TokenBudgetService;
+}
+
+function formatJsonOutput(payload: unknown): string {
+  return JSON.stringify(payload, null, 2) + '\n';
+}
+
+function formatTokenReport(report: {
+  baselineTokens: number;
+  cachedTokens: number;
+  savedTokens: number;
+  savedPercent: number;
+  baselineSources: string[];
+  cachedArtifacts: string[];
+}): string {
+  return [
+    `Baseline tokens: ${report.baselineTokens}`,
+    `Cached tokens: ${report.cachedTokens}`,
+    `Saved tokens: ${report.savedTokens} (${report.savedPercent.toFixed(1)}%)`,
+    `Baseline sources: ${report.baselineSources.length > 0 ? report.baselineSources.join(', ') : 'none'}`,
+    `Cached artifacts: ${report.cachedArtifacts.join(', ')}`
+  ].join('\n') + '\n';
+}
+
+function normalizePathArg(target: string | undefined, fallback = '.'): string {
+  return path.resolve(process.cwd(), target ?? fallback);
+}
+
+function createWorkspaceCompatibilityBundle(workspaceRoot: string): WorkspaceCompatibilityBundle {
+  const dbFile = PathSanitizer.sanitizeSubPath(workspaceRoot, '.flash-mem/flashmem.sqlite');
+  if (!fs.existsSync(dbFile)) {
+    throw new Error(`No SQLite memory store found at "${dbFile}". Run "flash-mem init" first.`);
+  }
+
+  const db = createDatabaseConnection(dbFile);
+  new SchemaMigrationService(db).ensureCurrentSchema();
+
+  const projectRepo = new ProjectRepository(db);
+  const project = projectRepo.upsertByRootPath(workspaceRoot, path.basename(workspaceRoot));
+  const memoryEntryRepository = new MemoryEntryRepository(db);
+  const tagRepository = new TagRepository(db);
+  const relationshipRepository = new RelationshipRepository(db);
+  const sourceDocumentRepository = new SourceDocumentRepository(db);
+  const projectSummaryRepository = new ProjectSummaryRepository(db);
+  const sharedLessonRepository = new SharedLessonRepository(db);
+  const transactionRunner = new SqliteTransactionRunner(db);
+  const memorySearchService = new MemorySearchService(memoryEntryRepository, tagRepository, projectRepo);
+  const projectSummaryService = new ProjectSummaryService(project.id, projectRepo, projectSummaryRepository);
+  const relevantContextService = new RelevantContextService(projectRepo, memorySearchService);
+  const memorySynthesisService = new MemorySynthesisService(projectRepo, projectSummaryService, relevantContextService);
+  const docSynthesisService = new DocSynthesisService();
+  const sharedLessonService = new SharedLessonService(sharedLessonRepository);
+  const compatibilityService = new SpecKitCompatibilityService(
+    memorySynthesisService,
+    docSynthesisService,
+    sharedLessonService,
+    new TokenBudgetService()
+  );
+
+  // Keep the original write-capable services available for future command extensions.
+  void relationshipRepository;
+  void sourceDocumentRepository;
+  void transactionRunner;
+
+  return {
+    db,
+    project,
+    compatibilityService,
+    memorySynthesisService,
+    docSynthesisService,
+    sharedLessonService,
+    tokenBudgetService: new TokenBudgetService()
+  };
 }
 
 async function promptForAgentInstructionTargets(): Promise<AgentInstructionTargetId[]> {
@@ -1029,6 +1120,340 @@ program
       }
       process.exitCode = 1;
       return;
+    }
+  });
+
+program
+  .command('prepare-context')
+  .description('Generate memory and doc synthesis artifacts plus a token report for a feature or workspace')
+  .argument('[path]', 'The workspace path to prepare context for', '.')
+  .option('--feature <path>', 'Feature path relative to the workspace root')
+  .option('--query <query>', 'Override the memory synthesis query')
+  .option('--token-budget <number>', 'Token budget for the memory synthesis output', (val) => parseInt(val, 10))
+  .option('--write', 'Write memory-synthesis.md and doc-synthesis.md to the feature path')
+  .option('-j, --json', 'Output structured JSON instead of plain text')
+  .action(async (workspaceArg, options) => {
+    const useJson = !!options.json;
+    let bundle: WorkspaceCompatibilityBundle | null = null;
+
+    try {
+      const workspaceRoot = normalizePathArg(workspaceArg);
+      bundle = createWorkspaceCompatibilityBundle(workspaceRoot);
+      const result = bundle.compatibilityService.prepareContext({
+        workspaceRoot,
+        featurePath: options.feature,
+        query: options.query,
+        tokenBudget: options.tokenBudget,
+        writeArtifacts: !!options.write
+      });
+
+      if (useJson) {
+        await writeStdout(formatJsonOutput({
+          success: true,
+          workspaceRoot: result.workspaceRoot,
+          featurePath: result.featurePath,
+          query: result.query,
+          memorySynthesis: result.memorySynthesis,
+          docSynthesis: result.docSynthesis,
+          tokenReport: result.tokenReport,
+          memorySynthesisPath: result.memorySynthesisPath,
+          docSynthesisPath: result.docSynthesisPath
+        }));
+      } else {
+        await writeStdout(result.memorySynthesis.markdown);
+        await writeStdout(result.docSynthesis.markdown);
+        await writeStdout(formatTokenReport(result.tokenReport));
+        if (result.memorySynthesisPath || result.docSynthesisPath) {
+          await writeStdout([
+            'Artifacts written:',
+            result.memorySynthesisPath ? `- ${path.relative(workspaceRoot, result.memorySynthesisPath)}` : null,
+            result.docSynthesisPath ? `- ${path.relative(workspaceRoot, result.docSynthesisPath)}` : null
+          ].filter(Boolean).join('\n') + '\n');
+        }
+      }
+
+      process.exitCode = 0;
+      return;
+    } catch (err: any) {
+      const errMsg = err.message || 'Unknown error occurred while preparing context';
+      await writeStderr(`Error: ${errMsg}\n`);
+      if (useJson) {
+        await writeStdout(formatJsonOutput({ success: false, error: errMsg }));
+      }
+      process.exitCode = 1;
+      return;
+    } finally {
+      bundle?.db.close();
+    }
+  });
+
+program
+  .command('synthesize-memory')
+  .description('Generate a memory synthesis for a feature or workspace')
+  .argument('[path]', 'The workspace path to read from', '.')
+  .option('--feature <path>', 'Feature path relative to the workspace root')
+  .option('--query <query>', 'Override the memory synthesis query')
+  .option('--token-budget <number>', 'Token budget for the synthesis output', (val) => parseInt(val, 10))
+  .option('--write', 'Write memory-synthesis.md to the feature path')
+  .option('-j, --json', 'Output structured JSON instead of plain text')
+  .action(async (workspaceArg, options) => {
+    const useJson = !!options.json;
+    let bundle: WorkspaceCompatibilityBundle | null = null;
+
+    try {
+      const workspaceRoot = normalizePathArg(workspaceArg);
+      bundle = createWorkspaceCompatibilityBundle(workspaceRoot);
+      const result = bundle.memorySynthesisService.buildFeatureSynthesis({
+        workspaceRoot,
+        query: options.query ?? options.feature ?? path.basename(workspaceRoot),
+        tokenBudget: options.tokenBudget,
+        resultLimit: 4
+      });
+
+      const artifactPath = options.write
+        ? PathSanitizer.sanitizeSubPath(options.feature ? PathSanitizer.sanitizeSubPath(workspaceRoot, options.feature) : workspaceRoot, 'memory-synthesis.md')
+        : null;
+
+      if (artifactPath) {
+        fs.ensureDirSync(path.dirname(artifactPath));
+        fs.writeFileSync(artifactPath, result.markdown, 'utf-8');
+      }
+
+      if (useJson) {
+        await writeStdout(formatJsonOutput({
+          success: true,
+          workspaceRoot,
+          query: options.query ?? options.feature ?? path.basename(workspaceRoot),
+          synthesis: result,
+          artifactPath
+        }));
+      } else {
+        await writeStdout(result.markdown);
+        await writeStdout(`Estimated tokens: ${result.tokenEstimate}\n`);
+        if (artifactPath) {
+          await writeStdout(`Artifact written: ${path.relative(workspaceRoot, artifactPath)}\n`);
+        }
+      }
+
+      process.exitCode = 0;
+      return;
+    } catch (err: any) {
+      const errMsg = err.message || 'Unknown error occurred while synthesizing memory';
+      await writeStderr(`Error: ${errMsg}\n`);
+      if (useJson) {
+        await writeStdout(formatJsonOutput({ success: false, error: errMsg }));
+      }
+      process.exitCode = 1;
+      return;
+    } finally {
+      bundle?.db.close();
+    }
+  });
+
+program
+  .command('synthesize-docs')
+  .description('Generate a doc synthesis for a feature or workspace')
+  .argument('[path]', 'The workspace path to read from', '.')
+  .option('--feature <path>', 'Feature path relative to the workspace root')
+  .option('--write', 'Write doc-synthesis.md to the feature path')
+  .option('-j, --json', 'Output structured JSON instead of plain text')
+  .action(async (workspaceArg, options) => {
+    const useJson = !!options.json;
+    let bundle: WorkspaceCompatibilityBundle | null = null;
+
+    try {
+      const workspaceRoot = normalizePathArg(workspaceArg);
+      bundle = createWorkspaceCompatibilityBundle(workspaceRoot);
+      const result = bundle.docSynthesisService.buildDocSynthesis({
+        workspaceRoot,
+        featurePath: options.feature ? options.feature : workspaceRoot
+      });
+
+      const featureRoot = options.feature
+        ? PathSanitizer.sanitizeSubPath(workspaceRoot, options.feature)
+        : workspaceRoot;
+      const artifactPath = options.write
+        ? PathSanitizer.sanitizeSubPath(featureRoot, 'doc-synthesis.md')
+        : null;
+
+      if (artifactPath) {
+        fs.ensureDirSync(path.dirname(artifactPath));
+        fs.writeFileSync(artifactPath, result.markdown, 'utf-8');
+      }
+
+      if (useJson) {
+        await writeStdout(formatJsonOutput({
+          success: true,
+          workspaceRoot,
+          featurePath: featureRoot,
+          synthesis: result,
+          artifactPath
+        }));
+      } else {
+        await writeStdout(result.markdown);
+        if (artifactPath) {
+          await writeStdout(`Artifact written: ${path.relative(workspaceRoot, artifactPath)}\n`);
+        }
+      }
+
+      process.exitCode = 0;
+      return;
+    } catch (err: any) {
+      const errMsg = err.message || 'Unknown error occurred while synthesizing docs';
+      await writeStderr(`Error: ${errMsg}\n`);
+      if (useJson) {
+        await writeStdout(formatJsonOutput({ success: false, error: errMsg }));
+      }
+      process.exitCode = 1;
+      return;
+    } finally {
+      bundle?.db.close();
+    }
+  });
+
+program
+  .command('token-report')
+  .description('Report the token budget comparison between raw docs and synthesized context')
+  .argument('[path]', 'The workspace path to read from', '.')
+  .option('--feature <path>', 'Feature path relative to the workspace root')
+  .option('--query <query>', 'Override the memory synthesis query')
+  .option('-j, --json', 'Output structured JSON instead of plain text')
+  .action(async (workspaceArg, options) => {
+    const useJson = !!options.json;
+    let bundle: WorkspaceCompatibilityBundle | null = null;
+
+    try {
+      const workspaceRoot = normalizePathArg(workspaceArg);
+      bundle = createWorkspaceCompatibilityBundle(workspaceRoot);
+      const result = bundle.compatibilityService.prepareContext({
+        workspaceRoot,
+        featurePath: options.feature,
+        query: options.query
+      });
+
+      if (useJson) {
+        await writeStdout(formatJsonOutput({
+          success: true,
+          workspaceRoot,
+          featurePath: result.featurePath,
+          query: result.query,
+          tokenReport: result.tokenReport
+        }));
+      } else {
+        await writeStdout(formatTokenReport(result.tokenReport));
+      }
+
+      process.exitCode = 0;
+      return;
+    } catch (err: any) {
+      const errMsg = err.message || 'Unknown error occurred while generating token report';
+      await writeStderr(`Error: ${errMsg}\n`);
+      if (useJson) {
+        await writeStdout(formatJsonOutput({ success: false, error: errMsg }));
+      }
+      process.exitCode = 1;
+      return;
+    } finally {
+      bundle?.db.close();
+    }
+  });
+
+program
+  .command('promote-lesson')
+  .description('Promote a validated lesson into shared memory')
+  .requiredOption('--topic <string>', 'Lesson topic')
+  .requiredOption('--lesson <string>', 'Lesson body')
+  .option('--framework <string>', 'Optional framework filter')
+  .option('--language <string>', 'Optional language filter')
+  .option('--workspace <path>', 'Workspace root used for source hashing', '.')
+  .option('-j, --json', 'Output structured JSON instead of plain text')
+  .action(async (options) => {
+    const useJson = !!options.json;
+    let bundle: WorkspaceCompatibilityBundle | null = null;
+
+    try {
+      const workspaceRoot = normalizePathArg(options.workspace);
+      bundle = createWorkspaceCompatibilityBundle(workspaceRoot);
+      const result = await bundle.compatibilityService.promoteLesson({
+        topic: options.topic,
+        lesson: options.lesson,
+        framework: options.framework,
+        language: options.language,
+        workspaceRoot
+      });
+
+      if (useJson) {
+        await writeStdout(formatJsonOutput({
+          success: true,
+          lesson: result
+        }));
+      } else {
+        await writeStdout(`Shared lesson promoted: ${result.topic}\n`);
+      }
+
+      process.exitCode = 0;
+      return;
+    } catch (err: any) {
+      const errMsg = err.message || 'Unknown error occurred while promoting lesson';
+      await writeStderr(`Error: ${errMsg}\n`);
+      if (useJson) {
+        await writeStdout(formatJsonOutput({ success: false, error: errMsg }));
+      }
+      process.exitCode = 1;
+      return;
+    } finally {
+      bundle?.db.close();
+    }
+  });
+
+program
+  .command('sync-shared')
+  .description('Sync shared lessons into a local review file')
+  .argument('[path]', 'The workspace path to sync into', '.')
+  .option('--framework <string>', 'Override the framework filter')
+  .option('--language <string>', 'Override the language filter')
+  .option('--limit <number>', 'Maximum number of lessons to sync', (val) => parseInt(val, 10))
+  .option('-j, --json', 'Output structured JSON instead of plain text')
+  .action(async (workspaceArg, options) => {
+    const useJson = !!options.json;
+    let bundle: WorkspaceCompatibilityBundle | null = null;
+
+    try {
+      const workspaceRoot = normalizePathArg(workspaceArg);
+      bundle = createWorkspaceCompatibilityBundle(workspaceRoot);
+      const result = await bundle.compatibilityService.syncSharedLessons({
+        workspaceRoot,
+        framework: options.framework,
+        language: options.language,
+        limit: options.limit
+      });
+
+      if (useJson) {
+        await writeStdout(formatJsonOutput({
+          success: true,
+          workspaceRoot,
+          ...result
+        }));
+      } else {
+        await writeStdout(result.markdown);
+        await writeStdout([
+          `Shared lessons written to: ${path.relative(workspaceRoot, result.filePath)}`,
+          `Compatibility review written to: ${path.relative(workspaceRoot, result.reviewFilePath)}`
+        ].join('\n') + '\n');
+      }
+
+      process.exitCode = 0;
+      return;
+    } catch (err: any) {
+      const errMsg = err.message || 'Unknown error occurred while syncing shared lessons';
+      await writeStderr(`Error: ${errMsg}\n`);
+      if (useJson) {
+        await writeStdout(formatJsonOutput({ success: false, error: errMsg }));
+      }
+      process.exitCode = 1;
+      return;
+    } finally {
+      bundle?.db.close();
     }
   });
 
