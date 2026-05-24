@@ -203,6 +203,50 @@ describe('CLI Integration', () => {
     }
   });
 
+  it('should update agent instructions with update and keep inject-prompts as a compatibility alias', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+
+    const targetFile = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    fs.writeFileSync(
+      targetFile,
+      [
+        '<!-- flash-mem-protocol-start v1 -->',
+        '# Engineering Memory Protocol (flash-mem)',
+        '',
+        'legacy content',
+        '<!-- flash-mem-protocol-end -->'
+      ].join('\n')
+    );
+
+    const updateResult = await execAsync(`node ${cliScript} update "${testWorkspace}" --json`);
+    expect(updateResult.stderr).toBe('');
+
+    const updatePayload = JSON.parse(updateResult.stdout.trim());
+    expect(updatePayload.success).toBe(true);
+    expect(Array.isArray(updatePayload.detected)).toBe(true);
+    expect(updatePayload.updated).toContain(targetFile);
+    expect(fs.existsSync(targetFile)).toBe(true);
+
+    const aliasResult = await execAsync(`node ${cliScript} inject-prompts "${testWorkspace}" --json`);
+    expect(aliasResult.stderr).toBe('');
+
+    const aliasPayload = JSON.parse(aliasResult.stdout.trim());
+    expect(aliasPayload.success).toBe(true);
+  });
+
+  it('should allow interactive init to create only the selected prompt files', async () => {
+    const { stdout, stderr } = await execAsync(`node ${cliScript} init "${testWorkspace}" --interactive`, {
+      tty: true,
+      input: ['1']
+    });
+
+    expect(stderr).toBe('');
+    expect(stdout).toContain('flash-mem initialized successfully at:');
+    expect(fs.existsSync(path.join(testWorkspace, 'ANTIGRAVITY.md'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
+    expect(fs.existsSync(path.join(testWorkspace, '.cursorrules'))).toBe(false);
+  });
+
   it('should export markdown backups from the CLI boundary', async () => {
     const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
     const db = createDatabaseConnection(dbFile);

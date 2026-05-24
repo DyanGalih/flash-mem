@@ -67,7 +67,20 @@ class Server {
           ? request.params.arguments
           : undefined;
         const parsed = tool.schema.parse(args);
-        const result = await tool.execute(parsed);
+        let rawResult = await tool.execute(parsed);
+        
+        let result;
+        if (rawResult && typeof rawResult === 'object' && Array.isArray(rawResult.content)) {
+          result = rawResult;
+        } else {
+          result = {
+            content: [{
+              type: 'text',
+              text: typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult, null, 2)
+            }]
+          };
+        }
+
         return {
           jsonrpc: '2.0',
           id: request.id,

@@ -31,16 +31,31 @@ describe('MCP Server Foundation', () => {
     const server = createMcpServer({ db, workspaceRoot });
 
     const toolNames = server.listTools().map((tool) => tool.name);
-    expect(toolNames).toEqual(expect.arrayContaining([
+    expect(toolNames.slice(0, 10)).toEqual([
       'get_project_summary',
       'update_project_summary',
       'search_memory',
       'get_relevant_context',
-      'capture_artifact_memory',
       'add_memory',
+      'update_memory',
+      'delete_memory',
+      'capture_artifact_memory',
       'export_markdown',
       'rebuild_index'
-    ]));
+    ]);
+    expect(toolNames.slice(10, 16)).toEqual([
+      'memory_project_summary_get',
+      'memory_project_summary_update',
+      'memory_search',
+      'memory_entry_create',
+      'memory_entry_update',
+      'memory_relationship_create'
+    ]);
+    expect(toolNames.slice(16)).toEqual([
+      'add_memory_relationship',
+      'memory_index',
+      'restore_backup'
+    ]);
     expect(server.listTools()[0]).toHaveProperty('schema');
     expect(project.name).toBe('mcp-tools-workspace');
   });
@@ -50,16 +65,18 @@ describe('MCP Server Foundation', () => {
     const server = createMcpServer({ db, workspaceRoot });
     const elapsed = performance.now() - start;
 
-    expect(server.listTools().map((tool) => tool.name)).toEqual(expect.arrayContaining([
+    expect(server.listTools().map((tool) => tool.name).slice(0, 10)).toEqual([
       'get_project_summary',
       'update_project_summary',
       'search_memory',
       'get_relevant_context',
-      'capture_artifact_memory',
       'add_memory',
+      'update_memory',
+      'delete_memory',
+      'capture_artifact_memory',
       'export_markdown',
       'rebuild_index'
-    ]));
+    ]);
     expect(elapsed).toBeLessThan(30000);
   });
 
@@ -148,6 +165,65 @@ describe('MCP Server Foundation', () => {
     expect(updatePayload.confidence).toBe(95);
     expect(updatePayload.relatedFiles).toBeNull();
     expect(updatePayload.title).toBe('Patch me'); // original title is retained
+  });
+
+  it('supports backward-compatible alias tools for retrieval and writes', async () => {
+    const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
+    const server = createMcpServer({ db, workspaceRoot });
+
+    const addResponse = (await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 12,
+      method: 'tools/call',
+      params: {
+        name: 'memory_entry_create',
+        arguments: {
+          projectId: project.id,
+          title: 'Alias entry',
+          content: 'Created via compatibility alias',
+          category: 'project',
+          source: 'test'
+        }
+      }
+    })) as any;
+
+    const addPayload = JSON.parse((addResponse.result as any).content[0].text);
+    const entryId = addPayload.id;
+    expect(addPayload.title).toBe('Alias entry');
+
+    const searchResponse = (await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 13,
+      method: 'tools/call',
+      params: {
+        name: 'memory_search',
+        arguments: {
+          projectId: project.id,
+          query: 'Alias entry'
+        }
+      }
+    })) as any;
+
+    const searchPayload = JSON.parse((searchResponse.result as any).content[0].text);
+    expect(searchPayload.results).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: entryId })
+    ]));
+
+    const updateResponse = (await server.handleRequest({
+      jsonrpc: '2.0',
+      id: 14,
+      method: 'tools/call',
+      params: {
+        name: 'memory_entry_update',
+        arguments: {
+          id: entryId,
+          confidence: 91
+        }
+      }
+    })) as any;
+
+    const updatePayload = JSON.parse((updateResponse.result as any).content[0].text);
+    expect(updatePayload.confidence).toBe(91);
   });
 
   it('supports delete_memory tool with soft delete', async () => {

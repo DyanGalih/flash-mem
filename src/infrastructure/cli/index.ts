@@ -4,7 +4,11 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as readline from 'readline';
 import { IndexingService } from '../../application/services/IndexingService';
-import { InitializeProjectService } from '../../application/services/InitializeProjectService';
+import {
+  AGENT_INSTRUCTION_TARGETS,
+  AgentInstructionTargetId,
+  InitializeProjectService
+} from '../../application/services/InitializeProjectService';
 import { MarkdownExportService } from '../../application/services/MarkdownExportService';
 import { MarkdownRestoreService } from '../../application/services/MarkdownRestoreService';
 import { MemoryEntryService } from '../../application/services/MemoryEntryService';
@@ -90,6 +94,79 @@ function parseConfidence(value: unknown): number | undefined {
   }
 
   return parsed;
+}
+
+async function promptForAgentInstructionTargets(): Promise<AgentInstructionTargetId[]> {
+  if (!process.stdin.isTTY) {
+    throw new Error('Interactive mode requires a TTY terminal');
+  }
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stderr
+  });
+
+  const linesQueue: string[] = [];
+  let pendingResolve: ((value: string) => void) | null = null;
+
+  rl.on('line', (line) => {
+    const trimmed = line.trim();
+    if (pendingResolve) {
+      const resolve = pendingResolve;
+      pendingResolve = null;
+      resolve(trimmed);
+    } else {
+      linesQueue.push(trimmed);
+    }
+  });
+
+  const ask = (query: string): Promise<string> => {
+    process.stderr.write(query);
+    const nextLine = linesQueue.shift();
+    if (nextLine !== undefined) {
+      return Promise.resolve(nextLine);
+    }
+    return new Promise((resolve) => {
+      pendingResolve = resolve;
+    });
+  };
+
+  const selectionHelp = AGENT_INSTRUCTION_TARGETS
+    .map((target, index) => `${index + 1}. ${target.label} (${target.filePath})`)
+    .join('\n');
+
+  try {
+    while (true) {
+      const input = await ask([
+        'Select agent instruction files to create:',
+        selectionHelp,
+        'Enter numbers separated by commas, or press Enter for all: '
+      ].join('\n'));
+
+      if (input.trim() === '') {
+        return AGENT_INSTRUCTION_TARGETS.map((target) => target.id);
+      }
+
+      const selectedIndexes = Array.from(new Set(
+        input
+          .split(',')
+          .map((token) => Number.parseInt(token.trim(), 10))
+          .filter((value) => Number.isInteger(value) && value >= 1 && value <= AGENT_INSTRUCTION_TARGETS.length)
+      ));
+
+      if (selectedIndexes.length === 0) {
+        process.stderr.write('Invalid selection. Try again.\n');
+        continue;
+      }
+
+      return selectedIndexes
+        .map((index) => AGENT_INSTRUCTION_TARGETS[index - 1])
+        .filter((target): target is (typeof AGENT_INSTRUCTION_TARGETS)[number] => Boolean(target))
+        .map((target) => target.id);
+    }
+  } finally {
+    rl.close();
+  }
 }
 
 function formatSearchTable(rows: Array<Record<string, string>>): string {
@@ -185,6 +262,7 @@ program
   .command('init')
   .description('Initialize a new flash-mem workspace')
   .argument('[path]', 'The project path to initialize', '.')
+  .option('-i, --interactive', 'Interactively choose which prompt files to create')
   .option('-j, --json', 'Output structured JSON instead of plain text')
   .action(async (dirArg, options) => {
     const service = new InitializeProjectService();
@@ -192,7 +270,8 @@ program
 
     try {
       const targetDir = path.resolve(process.cwd(), dirArg);
-      const result = service.execute(targetDir);
+      const promptTargetIds = options.interactive ? await promptForAgentInstructionTargets() : undefined;
+      const result = service.execute(targetDir, { promptTargetIds });
 
       if (useJson) {
         await writeStdout(JSON.stringify({
@@ -221,8 +300,9 @@ program
   });
 
 program
-  .command('inject-prompts')
-  .description('Inject or upgrade the Engineering Memory Protocol into agent instruction files (ANTIGRAVITY.md, AGENTS.md, .cursorrules, CLINE.md, .github/copilot-instructions.md)')
+  .command('update')
+  .alias('inject-prompts')
+  .description('Update existing Engineering Memory Protocol files in the current workspace and detect the active prompt surface')
   .argument('[path]', 'The project path to inject into', '.')
   .option('-j, --json', 'Output structured JSON instead of plain text')
   .action(async (dirArg, options) => {
@@ -236,15 +316,28 @@ program
       }
 
       const service = new InitializeProjectService();
-      const { updated, skipped } = service.writeAgentInstructions(targetDir);
+      const { updated, skipped, detected } = service.writeAgentInstructions(targetDir, {
+        existingOnly: true
+      });
 
       if (useJson) {
         await writeStdout(JSON.stringify({
           success: true,
           updated,
-          skipped
+          skipped,
+          detected: detected.map((target) => ({
+            id: target.id,
+            label: target.label,
+            filePath: target.filePath,
+            kind: target.kind
+          }))
         }, null, 2) + '\n');
       } else {
+        if (detected.length > 0) {
+          await writeStdout(`Detected prompt surface(s): ${detected.map((target) => `${target.label} (${target.filePath})`).join(', ')}\n`);
+        } else {
+          await writeStdout('No existing prompt injection files found in this workspace.\n');
+        }
         if (updated.length > 0) {
           await writeStdout(`Updated ${updated.length} file(s):\n`);
           for (const f of updated) {
@@ -258,7 +351,7 @@ program
           }
         }
         if (updated.length === 0 && skipped.length === 0) {
-          await writeStdout('No agent instruction files found or created.\n');
+          await writeStdout('No agent instruction files were updated.\n');
         }
       }
 

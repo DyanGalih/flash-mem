@@ -78,6 +78,36 @@ describe('InitializeProjectService Unit', () => {
     expect(reloaded.name).toBe('custom-preserved-name');
   });
 
+  it('should create only selected prompt targets during interactive-style init', () => {
+    service.execute(testWorkspace, { promptTargetIds: ['antigravity'] });
+
+    expect(fs.existsSync(path.join(testWorkspace, 'ANTIGRAVITY.md'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
+    expect(fs.existsSync(path.join(testWorkspace, '.cursorrules'))).toBe(false);
+  });
+
+  it('should detect and update only existing prompt targets when requested', () => {
+    const targetPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    fs.writeFileSync(
+      targetPath,
+      [
+        '# Engineering Memory Protocol (flash-mem)',
+        '',
+        'legacy content',
+        '',
+        '<!-- flash-mem: This file contains an unversioned flash-mem block from a previous install. Run `flash-mem update` to upgrade to the latest protocol. -->'
+      ].join('\n')
+    );
+
+    const result = service.writeAgentInstructions(testWorkspace, { existingOnly: true });
+
+    expect(result.detected.map((target) => target.filePath)).toEqual(['ANTIGRAVITY.md']);
+    expect(result.updated).toContain(targetPath);
+    expect(fs.readFileSync(targetPath, 'utf-8')).toContain('<!-- flash-mem-protocol-start v3 -->');
+    expect(fs.readFileSync(targetPath, 'utf-8')).not.toContain('unversioned flash-mem block');
+    expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
+  });
+
   it('should self-heal missing files but keep existing ones', () => {
     service.execute(testWorkspace);
 

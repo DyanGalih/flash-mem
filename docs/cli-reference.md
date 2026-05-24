@@ -2,6 +2,8 @@
 
 > [!NOTE]
 > `flash-mem` is designed to be fully automated via the MCP Server. The commands below are provided strictly for debugging, CI/CD scripts, or legacy workflows.
+>
+> For MCP setup examples by installation type and IDE, see [MCP Setup Guide](docs/mcp-setup.md).
 
 ## CLI Commands
 

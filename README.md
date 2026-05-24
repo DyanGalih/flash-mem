@@ -1,11 +1,48 @@
-# flash-mem
+# ⚡ flash-mem
 
 [![npm version](https://img.shields.io/npm/v/flash-mem.svg)](https://www.npmjs.com/package/flash-mem)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![smithery badge](https://smithery.ai/badge/flash-mem)](https://smithery.ai/server/flash-mem)
 [![Made with ❤️ in Indonesia](https://img.shields.io/badge/Made_with_%E2%9D%A4%EF%B8%8F_in-Indonesia-red.svg)](https://github.com/galih/flash-mem)
 
-A local-first engineering memory server and CLI tool designed for developers and AI agents. It stores key engineering knowledge, architectural decisions, and project conventions to enable context-aware coding and knowledge reuse.
+`flash-mem` is a local-first engineering memory server and CLI tool for software teams and AI coding agents.
+
+It stores durable project knowledge so agents can retrieve the right context before writing code. That includes project summaries, architecture decisions, conventions, bug patterns, and other stable engineering knowledge.
+
+If you are using AI for vibe coding, spec-driven development, or as a pair-programming partner, `flash-mem` helps keep the model grounded in your actual codebase instead of guessing from scratch every session.
+
+The name reflects the goal of fast retrieval, fast context, and fast iteration for engineering work.
+
+## What It Is
+
+`flash-mem` is a memory layer for engineering work, not a source-code mirror.
+
+It is designed to help engineers and AI agents:
+- remember durable project knowledge across sessions
+- search architecture decisions and conventions quickly
+- reduce repeated research and repeated mistakes
+- keep retrieval-first workflows before code changes
+- preserve context for agent-assisted development and SDD
+
+For a deeper explanation of greenfield and brownfield workflows, see [Usage Guide](docs/usage.md).
+
+For the tool list and aliases, see [Tool Surface](docs/tool-surface.md).
+
+## Quick Start
+
+1. Initialize the workspace:
+```bash
+flash-mem init .
+```
+
+2. Connect your IDE or agent through MCP so it can read and write project memory.
+
+3. For brownfield work, refresh the markdown-backed project memory:
+```bash
+flash-mem rebuild-index . --yes
+```
+
+4. Search memory before making changes and write durable knowledge as you discover it.
 
 ## Installation
 
@@ -34,64 +71,64 @@ npm link
 
 ## MCP Configuration
 
-`flash-mem` is fully compatible with standard Model Context Protocol (MCP) clients.
+`flash-mem` is fully compatible with standard Model Context Protocol (MCP) clients. See [docs/mcp-setup.md](docs/mcp-setup.md) for grouped setup examples covering global installation, development checkouts, direct path execution, and IDE-specific configurations.
 
-### 1. Claude Desktop
+### Tool Surface
 
-To use `flash-mem` with Claude Desktop, add the following to your `claude_desktop_config.json`:
+`flash-mem` keeps a small public API and preserves older names as deprecated compatibility aliases.
 
+Workflow order:
+- Retrieval: `get_project_summary`, `search_memory`, `get_relevant_context`
+- Writes: `add_memory`, `update_memory`, `delete_memory`
+- Capture and maintenance: `capture_artifact_memory`, `export_markdown`, `rebuild_index`
+
+Advanced / admin:
+- `add_memory_relationship`
+- `memory_index`
+- `restore_backup`
+
+Compatibility aliases:
+- `memory_search` -> `search_memory`
+- `memory_entry_create` -> `add_memory`
+- `memory_entry_update` -> `update_memory`
+- `memory_relationship_create` -> `add_memory_relationship`
+- `memory_project_summary_get` -> `get_project_summary`
+- `memory_project_summary_update` -> `update_project_summary`
+
+`memory_index` is retained as a lower-level incremental ingestion tool. Use `rebuild_index` for a full workspace rescan.
+
+### Minimal Agent Guide
+
+Use the tools in this order:
+1. Read `get_project_summary` to understand the high-level project state.
+2. Run `search_memory` for keyword or semantic lookup across durable knowledge.
+3. Use `get_relevant_context` when you want a compact, decision-oriented summary.
+4. Write with `add_memory` when you have established durable knowledge.
+5. Use `update_memory` for changes to an existing durable entry, and `delete_memory` only when removal is explicit and auditable.
+6. Use `capture_artifact_memory` for turning a doc into durable knowledge.
+7. Use `export_markdown` for backup or review, and `rebuild_index` for a full workspace rescan.
+
+Example calls:
 ```json
 {
-  "mcpServers": {
-    "flash-mem": {
-      "command": "node",
-      "args": [
-        "/path/to/flash-mem/dist/infrastructure/cli/index.js",
-        "mcp",
-        "/path/to/your/default/workspace"
-      ],
-      "env": {
-        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
-      }
-    }
+  "name": "search_memory",
+  "arguments": {
+    "projectId": "project-id",
+    "query": "sqlite transaction handling"
   }
 }
 ```
-*Note: Replace the paths with your actual absolute paths. Supplying a specific workspace path makes Claude Desktop always target that directory.*
 
-### 2. VS Code Extensions (Antigravity, Cline, Roo Code, Codex)
-
-VS Code extensions are designed to handle **multiple projects and multiple workspaces**. 
-
-**DO NOT define a workspace path in the `args` array!** By intentionally omitting the `/path/to/your/workspace` argument, `flash-mem` will automatically inherit the current working directory from the extension. This allows a single MCP configuration to seamlessly manage `.flash-mem` memory databases across all your different projects without any manual adjustments.
-
-Depending on your specific extension, add the following to your MCP configuration file:
-
-**For extensions using TOML (e.g., Codex):**
-```toml
-[mcp_servers.flash_mem]
-command = "node"
-args = [
-  "/absolute/path/to/flash-mem/dist/infrastructure/cli/index.js",
-  "mcp"
-]
-enabled = true
-```
-
-**For extensions using JSON (e.g., Antigravity, Cline, Roo Code):**
 ```json
 {
-  "mcpServers": {
-    "flash-mem": {
-      "command": "node",
-      "args": [
-        "/absolute/path/to/flash-mem/dist/infrastructure/cli/index.js",
-        "mcp"
-      ],
-      "env": {
-        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
-      }
-    }
+  "name": "add_memory",
+  "arguments": {
+    "projectId": "project-id",
+    "title": "Use transactions for memory writes",
+    "content": "Memory writes should stay transactional to avoid partial state.",
+    "category": "convention",
+    "source": "docs/architecture.md",
+    "tags": ["transaction", "convention"]
   }
 }
 ```
