@@ -9,6 +9,9 @@ Did you use flash-mem in this work?
 - If yes, what flash-mem context or memory did you use?
 - If no, why not?
 
+What was the result of using flash-mem?
+- If the result was empty, why was it empty?
+
 Be specific and short. Do not guess.
 ```
 
@@ -21,7 +24,9 @@ Answer only these:
 1. Did you call flash-mem or use flash-mem context?
 2. What did you retrieve from it?
 3. Why was it relevant to this work?
-4. If you did not use it, say why not.
+4. What was the result?
+5. If the result was empty, why was it empty?
+6. If you did not use it, say why not.
 
 If you are unsure, say "I am not sure" instead of guessing.
 ```
