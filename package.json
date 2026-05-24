@@ -1,11 +1,22 @@
 {
   "name": "flash-mem",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Durable engineering memory for AI-assisted software development",
   "main": "dist/index.js",
   "bin": {
     "flash-mem": "dist/infrastructure/cli/index.js"
   },
+  "files": [
+    "dist",
+    "docs/cli-reference.md",
+    "docs/flash-mem-review-prompt.md",
+    "docs/mcp-setup.md",
+    "docs/spec-kit-integration.md",
+    "docs/tool-surface.md",
+    "docs/usage.md",
+    "vendor/modelcontextprotocol-sdk",
+    "README.md"
+  ],
   "type": "commonjs",
   "scripts": {
     "build": "tsc",
