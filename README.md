@@ -28,6 +28,8 @@ For a deeper explanation of greenfield and brownfield workflows, see [Usage Guid
 
 For the tool list and aliases, see [Tool Surface](docs/tool-surface.md).
 
+For a reusable review prompt to check whether flash-mem was used in a task, see [flash-mem Review Prompt](docs/flash-mem-review-prompt.md).
+
 ## Quick Start
 
 1. Initialize the workspace:
