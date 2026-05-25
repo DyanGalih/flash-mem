@@ -1,6 +1,6 @@
 {
   "name": "flash-mem",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Durable engineering memory for AI-assisted software development",
   "main": "dist/index.js",
   "bin": {
