@@ -66,6 +66,7 @@ export interface McpServerContext {
 
 type McpToolDefinition = {
   name: string;
+  description: string;
   schema: unknown;
   execute: (input: any) => unknown;
 };

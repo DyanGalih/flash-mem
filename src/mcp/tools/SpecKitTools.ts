@@ -150,6 +150,7 @@ function resolveProjectId(input: { projectId?: string; workspaceRoot?: string; p
 export function createPrepareContextTool(service: SpecKitCompatibilityService, defaultWorkspaceRoot: string) {
   return {
     name: 'prepare_context',
+    description: 'Prepare a Spec Kit compatible context bundle for the active workspace.',
     schema: prepareContextInputSchema,
     execute: (input: z.infer<typeof prepareContextInputSchema>) =>
       service.prepareContext({
@@ -165,6 +166,7 @@ export function createPrepareContextTool(service: SpecKitCompatibilityService, d
 export function createMemorySynthesisTool(service: MemorySynthesisService, defaultWorkspaceRoot: string) {
   return {
     name: 'memory_synthesis',
+    description: 'Build a memory synthesis for a workspace or feature.',
     schema: memorySynthesisInputSchema,
     execute: (input: z.infer<typeof memorySynthesisInputSchema>) =>
       service.buildFeatureSynthesis({
@@ -179,6 +181,7 @@ export function createMemorySynthesisTool(service: MemorySynthesisService, defau
 export function createSpeckitMemorySearchTool(service: MemorySearchService, projectRepository: ProjectRepository, defaultWorkspaceRoot: string) {
   return {
     name: 'speckit_memory_search',
+    description: 'Compatibility wrapper for Spec Kit memory search requests.',
     schema: speckitMemorySearchInputSchema,
     execute: (input: z.infer<typeof speckitMemorySearchInputSchema>) => {
       const projectId = resolveProjectId(input, projectRepository, defaultWorkspaceRoot);
@@ -194,6 +197,7 @@ export function createSpeckitMemorySearchTool(service: MemorySearchService, proj
 export function createSpeckitMemorySynthesizeTool(service: MemorySynthesisService, defaultWorkspaceRoot: string) {
   return {
     name: 'speckit_memory_synthesize',
+    description: 'Compatibility wrapper for Spec Kit memory synthesis requests.',
     schema: speckitMemorySynthesizeInputSchema,
     execute: (input: z.infer<typeof speckitMemorySynthesizeInputSchema>) => {
       const workspaceRoot = resolveWorkspaceRoot(input.workspaceRoot ?? input.projectRoot, defaultWorkspaceRoot);
@@ -210,6 +214,7 @@ export function createSpeckitMemorySynthesizeTool(service: MemorySynthesisServic
 export function createSpeckitMemoryTokenReportTool(service: SpecKitCompatibilityService, defaultWorkspaceRoot: string) {
   return {
     name: 'speckit_memory_token_report',
+    description: 'Compatibility wrapper for the Spec Kit token report workflow.',
     schema: speckitMemoryTokenReportInputSchema,
     execute: (input: z.infer<typeof speckitMemoryTokenReportInputSchema>) => {
       const prepared = prepareTokenReportContext(
@@ -235,6 +240,7 @@ export function createSpeckitMemoryTokenReportTool(service: SpecKitCompatibility
 export function createSpeckitMemoryShareLessonTool(service: SpecKitCompatibilityService, defaultWorkspaceRoot: string) {
   return {
     name: 'speckit_memory_share_lesson',
+    description: 'Compatibility wrapper for sharing a lesson into shared memory.',
     schema: speckitMemoryShareLessonInputSchema,
     execute: (input: z.infer<typeof speckitMemoryShareLessonInputSchema>) => {
       return service.shareLesson({
@@ -253,6 +259,7 @@ export function createSpeckitMemoryShareLessonTool(service: SpecKitCompatibility
 export function createSpeckitMemorySyncSharedTool(service: SpecKitCompatibilityService, defaultWorkspaceRoot: string) {
   return {
     name: 'speckit_memory_sync_shared',
+    description: 'Compatibility wrapper for syncing shared lessons into a review buffer.',
     schema: speckitMemorySyncSharedInputSchema,
     execute: (input: z.infer<typeof speckitMemorySyncSharedInputSchema>) =>
       service.syncSharedLessons({
@@ -267,6 +274,7 @@ export function createSpeckitMemorySyncSharedTool(service: SpecKitCompatibilityS
 export function createSpeckitMemoryInitProjectTool(service: SpecKitCompatibilityService, defaultWorkspaceRoot: string) {
   return {
     name: 'speckit_memory_init_project',
+    description: 'Compatibility wrapper for initializing a Spec Kit memory project profile.',
     schema: speckitMemoryInitProjectInputSchema,
     execute: (input: z.infer<typeof speckitMemoryInitProjectInputSchema>) => {
       return service.initProject({
@@ -281,6 +289,7 @@ export function createSpeckitMemoryInitProjectTool(service: SpecKitCompatibility
 export function createDocSynthesisTool(service: DocSynthesisService, defaultWorkspaceRoot: string) {
   return {
     name: 'doc_synthesis',
+    description: 'Build a doc synthesis for a workspace or feature.',
     schema: docSynthesisInputSchema,
     execute: (input: z.infer<typeof docSynthesisInputSchema>) =>
       service.buildDocSynthesis({
@@ -294,6 +303,7 @@ export function createDocSynthesisTool(service: DocSynthesisService, defaultWork
 export function createTokenReportTool(service: SpecKitCompatibilityService, defaultWorkspaceRoot: string) {
   return {
     name: 'token_report',
+    description: 'Report token usage for a workspace or feature context.',
     schema: tokenReportInputSchema,
     execute: (input: z.infer<typeof tokenReportInputSchema>) => {
       const prepared = prepareTokenReportContext(
@@ -316,6 +326,7 @@ export function createTokenReportTool(service: SpecKitCompatibilityService, defa
 export function createPromoteSharedLessonTool(service: SpecKitCompatibilityService, defaultWorkspaceRoot: string) {
   return {
     name: 'promote_shared_lesson',
+    description: 'Promote a lesson into shared memory.',
     schema: promoteSharedLessonInputSchema,
     execute: (input: z.infer<typeof promoteSharedLessonInputSchema>) =>
       service.promoteLesson({
@@ -331,6 +342,7 @@ export function createPromoteSharedLessonTool(service: SpecKitCompatibilityServi
 export function createSyncSharedLessonsTool(service: SpecKitCompatibilityService, defaultWorkspaceRoot: string) {
   return {
     name: 'sync_shared_lessons',
+    description: 'Sync shared lessons into the local review file.',
     schema: syncSharedLessonsInputSchema,
     execute: (input: z.infer<typeof syncSharedLessonsInputSchema>) =>
       service.syncSharedLessons({

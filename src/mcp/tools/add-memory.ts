@@ -17,6 +17,7 @@ export const addMemoryInputSchema = MemoryEntryInputSchema.omit({
 export function createAddMemoryTool(service: MemoryEntryService) {
   return {
     name: 'add_memory',
+    description: 'Create a new durable memory entry for the current project.',
     schema: addMemoryInputSchema,
     execute: (input: z.infer<typeof addMemoryInputSchema>) => {
       const { related_files, ...rest } = input;

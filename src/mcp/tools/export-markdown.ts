@@ -8,6 +8,7 @@ export const exportMarkdownInputSchema = z.object({
 export function createExportMarkdownTool(service: MarkdownExportService) {
   return {
     name: 'export_markdown',
+    description: 'Export the workspace memory state to markdown backup files.',
     schema: exportMarkdownInputSchema,
     execute: (input: z.infer<typeof exportMarkdownInputSchema>) => service.exportWorkspace(input.workspaceRoot)
   };

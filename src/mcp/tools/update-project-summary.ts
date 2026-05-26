@@ -14,6 +14,7 @@ export function createUpdateProjectSummaryTool(
 ) {
   return {
     name: 'update_project_summary',
+    description: 'Update the current project summary for the active workspace.',
     schema: updateProjectSummaryInputSchema,
     execute: (input: z.infer<typeof updateProjectSummaryInputSchema>) => {
       if (!options.canWriteProjectSummary) {

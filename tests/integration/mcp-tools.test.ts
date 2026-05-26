@@ -29,8 +29,9 @@ describe('MCP Server Foundation', () => {
   it('registers the required tools with schemas', () => {
     const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
     const server = createMcpServer({ db, workspaceRoot });
+    const tools = server.listTools();
 
-    const toolNames = server.listTools().map((tool) => tool.name);
+    const toolNames = tools.map((tool) => tool.name);
     expect(toolNames.slice(0, 10)).toEqual([
       'get_project_summary',
       'update_project_summary',
@@ -72,7 +73,8 @@ describe('MCP Server Foundation', () => {
       'speckit_memory_sync_shared',
       'speckit_memory_init_project'
     ]));
-    expect(server.listTools()[0]).toHaveProperty('schema');
+    expect(tools[0]).toHaveProperty('schema');
+    expect(tools.every((tool) => typeof tool.description === 'string' && tool.description.length > 0)).toBe(true);
     expect(project.name).toBe('mcp-tools-workspace');
   });
 
@@ -112,6 +114,7 @@ describe('MCP Server Foundation', () => {
         expect.objectContaining({ name: 'search_memory' })
       ])
     );
+    expect((listResponse.result as { tools: Array<{ name: string; description?: string }> }).tools.every((tool) => typeof tool.description === 'string' && tool.description.length > 0)).toBe(true);
 
     const callResponse = await server.handleRequest({
       jsonrpc: '2.0',

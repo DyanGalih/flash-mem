@@ -11,6 +11,7 @@ export const restoreBackupInputSchema = z.object({
 export function createRestoreBackupTool(service: MarkdownRestoreService) {
   return {
     name: 'restore_backup',
+    description: 'Restore memory entries from markdown backup files.',
     schema: restoreBackupInputSchema,
     execute: (input: z.infer<typeof restoreBackupInputSchema>) => {
       const backupDir = input.backupDirectory 

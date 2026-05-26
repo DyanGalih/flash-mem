@@ -19,6 +19,7 @@ export const updateMemoryInputSchema = z.object({
 export function createUpdateMemoryTool(service: MemoryEntryService) {
   return {
     name: 'update_memory',
+    description: 'Update an existing durable memory entry.',
     schema: updateMemoryInputSchema,
     execute: (input: z.infer<typeof updateMemoryInputSchema>) => {
       const { id, related_files, ...rest } = input;

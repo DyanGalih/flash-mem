@@ -8,6 +8,7 @@ export const deleteMemoryInputSchema = z.object({
 export function createDeleteMemoryTool(service: MemoryEntryService) {
   return {
     name: 'delete_memory',
+    description: 'Delete a durable memory entry by id.',
     schema: deleteMemoryInputSchema,
     execute: (input: z.infer<typeof deleteMemoryInputSchema>) => {
       const success = service.deleteMemoryEntry(input.id);

@@ -49,6 +49,7 @@ class Server {
         result: {
           tools: this.listTools().map((tool) => ({
             name: tool.name,
+            description: tool.description,
             inputSchema: zodToJsonSchema(tool.schema)
           }))
         }

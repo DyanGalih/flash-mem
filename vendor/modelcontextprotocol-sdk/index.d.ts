@@ -20,6 +20,7 @@ export interface JsonRpcResponse<T = unknown> {
 
 export interface RegisteredTool<Input = unknown, Output = unknown> {
   name: string;
+  description?: string;
   schema: {
     parse(input: unknown): Input;
   };

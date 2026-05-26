@@ -8,6 +8,7 @@ export const rebuildIndexInputSchema = z.object({
 export function createRebuildIndexTool(service: WorkspaceIndexingService) {
   return {
     name: 'rebuild_index',
+    description: 'Rebuild the workspace memory index from source documents.',
     schema: rebuildIndexInputSchema,
     execute: (input: z.infer<typeof rebuildIndexInputSchema>) => service.rebuildIndex(input.workspaceRoot)
   };
