@@ -30,6 +30,7 @@ import { ArtifactReader } from '../infrastructure/markdown/ArtifactReader';
 import { CaptureDeduplicationGuard } from '../infrastructure/safety/CaptureDeduplicationGuard';
 import { PathSanitizer } from '../infrastructure/safety/PathSanitizer';
 import { SecretScanner } from '../infrastructure/safety/SecretScanner';
+import { getGlobalHubDatabase } from '../infrastructure/database/global';
 import { createAddMemoryTool } from './tools/add-memory';
 import { createCaptureArtifactMemoryTool } from './tools/capture-artifact-memory';
 import { createDeleteMemoryTool } from './tools/delete-memory';
@@ -152,7 +153,9 @@ export function createMcpServer(context: McpServerContext) {
   );
   const docSynthesisService = new DocSynthesisService();
   const sharedLessonRepository = new SharedLessonRepository(context.db);
-  const sharedLessonService = new SharedLessonService(sharedLessonRepository);
+  const globalDb = getGlobalHubDatabase();
+  const globalSharedLessonRepository = new SharedLessonRepository(globalDb);
+  const sharedLessonService = new SharedLessonService(sharedLessonRepository, globalSharedLessonRepository);
   const compatibilityService = new SpecKitCompatibilityService(
     memorySynthesisService,
     docSynthesisService,

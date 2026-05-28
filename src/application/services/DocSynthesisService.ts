@@ -69,7 +69,10 @@ export class DocSynthesisService {
 
   private scanDirectory(workspaceRoot: string, currentDir: string, collected: Set<string>): void {
     for (const item of fs.readdirSync(currentDir)) {
-      if (item === '.git' || item === '.flash-mem' || item === 'node_modules' || item === 'dist' || item === 'coverage') {
+      if (
+        item === 'node_modules' || item === 'dist' || item === 'coverage' || item === 'build' ||
+        (item.startsWith('.') && item !== '.specify')
+      ) {
         continue;
       }
 

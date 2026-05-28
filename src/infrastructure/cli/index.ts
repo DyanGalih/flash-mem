@@ -34,6 +34,7 @@ import { SharedLessonRepository } from '../../infrastructure/database/repositori
 import { SqliteTransactionRunner } from '../../infrastructure/database/SqliteTransactionRunner';
 import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
+import { getGlobalHubDatabase } from '../../infrastructure/database/global';
 import { startMcpServer } from '../../mcp/server';
 import { resolveWorkspaceRootForAdd } from './workspace-root';
 
@@ -163,7 +164,11 @@ function createWorkspaceCompatibilityBundle(workspaceRoot: string): WorkspaceCom
   const relevantContextService = new RelevantContextService(projectRepo, memorySearchService);
   const memorySynthesisService = new MemorySynthesisService(projectRepo, projectSummaryService, relevantContextService);
   const docSynthesisService = new DocSynthesisService();
-  const sharedLessonService = new SharedLessonService(sharedLessonRepository);
+  
+  const globalDb = getGlobalHubDatabase();
+  const globalSharedLessonRepository = new SharedLessonRepository(globalDb);
+  
+  const sharedLessonService = new SharedLessonService(sharedLessonRepository, globalSharedLessonRepository);
   const compatibilityService = new SpecKitCompatibilityService(
     memorySynthesisService,
     docSynthesisService,
@@ -187,10 +192,14 @@ function createWorkspaceCompatibilityBundle(workspaceRoot: string): WorkspaceCom
   };
 }
 
-async function promptForAgentInstructionTargets(): Promise<AgentInstructionTargetId[]> {
+async function promptForAgentInstructionTargets(targetDir: string): Promise<AgentInstructionTargetId[]> {
   if (!process.stdin.isTTY) {
     throw new Error('Interactive mode requires a TTY terminal');
   }
+
+  const service = new InitializeProjectService();
+  const targets = service.getAgentInstructionTargets(targetDir);
+  const detectedIds = targets.filter(t => t.exists).map(t => t.id);
 
   const rl = readline.createInterface({
     input: process.stdin,
@@ -222,20 +231,24 @@ async function promptForAgentInstructionTargets(): Promise<AgentInstructionTarge
     });
   };
 
-  const selectionHelp = AGENT_INSTRUCTION_TARGETS
-    .map((target, index) => `${index + 1}. ${target.label} (${target.filePath})`)
+  const selectionHelp = targets
+    .map((target, index) => `${index + 1}. ${target.label} (${target.filePath})${target.exists ? ' (Detected)' : ''}`)
     .join('\n');
 
   try {
     while (true) {
+      const promptText = detectedIds.length > 0 
+        ? 'Enter numbers separated by commas, or press Enter to update detected agents: '
+        : 'Enter numbers separated by commas, or press Enter for all: ';
+
       const input = await ask([
         'Select agent instruction files to create:',
         selectionHelp,
-        'Enter numbers separated by commas, or press Enter for all: '
+        promptText
       ].join('\n'));
 
       if (input.trim() === '') {
-        return AGENT_INSTRUCTION_TARGETS.map((target) => target.id);
+        return detectedIds.length > 0 ? detectedIds : AGENT_INSTRUCTION_TARGETS.map((target) => target.id);
       }
 
       const selectedIndexes = Array.from(new Set(
@@ -353,7 +366,8 @@ program
   .command('init')
   .description('Initialize a new flash-mem workspace')
   .argument('[path]', 'The project path to initialize', '.')
-  .option('-i, --interactive', 'Interactively choose which prompt files to create')
+  .option('-a, --all', 'Skip interactive prompt and create instruction files for all supported agents')
+  .option('-i, --interactive', 'Interactively choose which prompt files to create (default in TTY)')
   .option('-j, --json', 'Output structured JSON instead of plain text')
   .action(async (dirArg, options) => {
     const service = new InitializeProjectService();
@@ -361,7 +375,14 @@ program
 
     try {
       const targetDir = path.resolve(process.cwd(), dirArg);
-      const promptTargetIds = options.interactive ? await promptForAgentInstructionTargets() : undefined;
+      
+      let promptTargetIds: AgentInstructionTargetId[] | undefined;
+      
+      if (options.all) {
+        promptTargetIds = AGENT_INSTRUCTION_TARGETS.map(t => t.id);
+      } else if (options.interactive || (process.stdin.isTTY && !useJson)) {
+        promptTargetIds = await promptForAgentInstructionTargets(targetDir);
+      }
       const result = service.execute(targetDir, { promptTargetIds });
 
       if (useJson) {
@@ -565,7 +586,10 @@ program
             const fullPath = path.join(dir, item);
             const relativePath = path.relative(workspaceRoot, fullPath);
 
-            if (item === '.git' || item === '.flash-mem' || item === 'node_modules') {
+            if (
+              item === 'node_modules' || item === 'dist' || item === 'coverage' || item === 'build' ||
+              (item.startsWith('.') && item !== '.specify')
+            ) {
               continue;
             }
 

@@ -22,17 +22,20 @@ export interface SharedLessonSyncResult {
 
 export class SharedLessonService {
   constructor(
-    private readonly repository?: SharedLessonRepository,
+    private readonly localRepository?: SharedLessonRepository,
+    private readonly globalRepository?: SharedLessonRepository,
     private readonly profileRepositoryFactory: (workspaceRoot: string) => ProjectProfileRepository = (workspaceRoot) => new ProjectProfileRepository(workspaceRoot)
   ) {}
 
   public async getLessonsByFramework(framework: string): Promise<SharedLesson[]> {
-    if (!this.repository) {
+    if (!this.localRepository && !this.globalRepository) {
       return [];
     }
 
-    const lessons = await this.repository.getLessonsByFramework(framework);
-    return lessons;
+    const repo = this.localRepository || this.globalRepository;
+    if (!repo) return [];
+    
+    return await repo.getLessonsByFramework(framework);
   }
 
   public async promoteLesson(topic: string, lesson: string, framework?: string, language?: string, workspaceRoot?: string): Promise<SharedLesson> {
@@ -56,13 +59,23 @@ export class SharedLessonService {
     const framework = (options.framework ?? profile?.framework ?? '').trim() || null;
     const language = (options.language ?? profile?.language ?? '').trim() || null;
     const limit = options.limit ?? 10;
-    const lessons = this.repository
-      ? await this.repository.listMatchingLessons({
+    const globalLessons = this.globalRepository
+      ? await this.globalRepository.listMatchingLessons({ framework, language, limit })
+      : [];
+
+    if (this.localRepository && globalLessons.length > 0) {
+      for (const lesson of globalLessons) {
+        await this.localRepository.saveLesson(lesson, lesson.sourceProjectHash);
+      }
+    }
+
+    const lessons = this.localRepository
+      ? await this.localRepository.listMatchingLessons({
         framework,
         language,
         limit
       })
-      : [];
+      : globalLessons;
 
     const markdown = this.renderSharedLessonsMarkdown(root, profile, lessons, { framework, language });
     const filePath = path.join(root, 'SHARED_LESSONS.md');
@@ -192,9 +205,12 @@ export class SharedLessonService {
       createdAt: new Date(now()).toISOString()
     };
 
-    if (this.repository) {
-      const sourceProjectHash = this.hashProjectRoot(workspaceRoot ?? topic);
-      await this.repository.saveLesson(entry, sourceProjectHash);
+    const sourceProjectHash = this.hashProjectRoot(workspaceRoot ?? topic);
+    if (this.localRepository) {
+      await this.localRepository.saveLesson(entry, sourceProjectHash);
+    }
+    if (this.globalRepository) {
+      await this.globalRepository.saveLesson(entry, sourceProjectHash);
     }
 
     return entry;
