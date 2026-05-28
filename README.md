@@ -5,13 +5,13 @@
 [![smithery badge](https://smithery.ai/badge/flash-mem)](https://smithery.ai/server/flash-mem)
 [![Made with ❤️ in Indonesia](https://img.shields.io/badge/Made_with_%E2%9D%A4%EF%B8%8F_in-Indonesia-red.svg)](https://github.com/galih/flash-mem)
 
-**Your coding agent remembers everything. No more re-explaining.**
+**Give your AI coding assistant a permanent memory.**
 
-`flash-mem` is an MCP (Model Context Protocol) server and CLI tool that provides persistent, durable engineering memory for any MCP-compatible AI coding agent (like Claude Code, Cursor, Windsurf, Roo Code, and more).
+`flash-mem` is an MCP (Model Context Protocol) server and CLI tool designed to provide durable engineering memory for any MCP-compatible AI agent, such as Claude Code, Cursor, Windsurf, and Roo Code.
 
-You explain the same architecture every session. You re-discover the same bugs. You re-teach the same preferences. Static context files like `CLAUDE.md` or `.cursorrules` get stale quickly and can't hold your entire project history. 
+Constantly reminding your AI about the same architectural rules? Tired of watching it stumble over known edge cases? Traditional static prompts like `.cursorrules` or `CLAUDE.md` quickly become outdated and simply can't scale with a complex project's history. 
 
-`flash-mem` fixes this. It stores your project summaries, architecture decisions, conventions, and bug patterns, allowing your agent to dynamically retrieve the exact context it needs before it writes a single line of code.
+`flash-mem` solves this by acting as a living knowledge base. It persistently stores your project's high-level summaries, core architectural decisions, coding conventions, and historical bug fixes. When your agent begins a new task, it dynamically retrieves the specific context it needs through the Model Context Protocol, ensuring it understands your codebase's unwritten rules before writing any code.
 
 **What changes?**
 In Session 1, you make an architectural decision to use `better-sqlite3` instead of an async driver. In Session 2, you ask the agent to add a new database repository. The agent automatically queries `flash-mem` via MCP, sees the previous architectural decision, and writes the correct synchronous code on the first try. No re-explaining. No copy-pasting. The agent just *knows*.
