@@ -27,6 +27,8 @@ It is designed to help engineers and AI agents:
 - keep retrieval-first workflows before code changes
 - preserve context for agent-assisted development and SDD
 
+If you are using AI for **vibe coding**, **spec-driven development** (like using **Spec-Kit**), or as a pair-programming partner, `flash-mem` helps keep the model grounded in your actual codebase instead of guessing from scratch every session.
+
 For a deeper explanation of greenfield and brownfield workflows, see [Usage Guide](docs/usage.md).
 
 For setup, workflow, and migration details, see the linked docs.
