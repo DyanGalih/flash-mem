@@ -85,3 +85,7 @@ These scripts will automatically:
 ## 🔌 MCP Configuration
 
 `flash-mem` is fully compatible with standard Model Context Protocol (MCP) clients. See [docs/mcp-setup.md](docs/mcp-setup.md) for grouped setup examples covering global installation, development checkouts, direct path execution, and IDE-specific configurations.
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
