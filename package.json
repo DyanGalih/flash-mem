@@ -23,7 +23,10 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "start": "node dist/infrastructure/cli/index.js",
-    "mcp": "node dist/infrastructure/cli/index.js mcp"
+    "mcp": "node dist/infrastructure/cli/index.js mcp",
+    "release:patch": "npm run build && npm version patch && git push && git push --tags && npm publish",
+    "release:minor": "npm run build && npm version minor && git push && git push --tags && npm publish",
+    "release:major": "npm run build && npm version major && git push && git push --tags && npm publish"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "file:./vendor/modelcontextprotocol-sdk",

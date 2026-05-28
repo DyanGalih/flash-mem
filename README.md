@@ -67,6 +67,21 @@ npm run build
 npm link
 ```
 
+## 🚀 Publishing a New Release
+
+To publish a new version of `flash-mem` to NPM, ensure you are logged in (`npm login`) and your working directory is clean. Then use one of the built-in release scripts:
+
+- **Patch Release (Bug fixes)**: `npm run release:patch` (e.g., `0.1.2` -> `0.1.3`)
+- **Minor Release (New features)**: `npm run release:minor` (e.g., `0.1.2` -> `0.2.0`)
+- **Major Release (Breaking changes)**: `npm run release:major` (e.g., `0.1.2` -> `1.0.0`)
+
+These scripts will automatically:
+1. Build the project
+2. Bump the version in `package.json`
+3. Create a git commit and tag
+4. Push the changes and tags to GitHub
+5. Publish the package to NPM
+
 ## 🔌 MCP Configuration
 
 `flash-mem` is fully compatible with standard Model Context Protocol (MCP) clients. See [docs/mcp-setup.md](docs/mcp-setup.md) for grouped setup examples covering global installation, development checkouts, direct path execution, and IDE-specific configurations.
