@@ -360,7 +360,7 @@ function renderSearchOutput(result: {
 program
   .name('flash-mem')
   .description('Local-first engineering memory server and CLI tool')
-  .version('0.1.0');
+  .version(require('../../../package.json').version);
 
 program
   .command('init')
