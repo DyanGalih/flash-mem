@@ -5,7 +5,7 @@
 [![smithery badge](https://smithery.ai/badge/flash-mem)](https://smithery.ai/server/flash-mem)
 [![Made with ❤️ in Indonesia](https://img.shields.io/badge/Made_with_%E2%9D%A4%EF%B8%8F_in-Indonesia-red.svg)](https://github.com/galih/flash-mem)
 
-`flash-mem` is a local-first engineering memory server and CLI tool for software teams and AI coding agents.
+`flash-mem` is an MCP (Model Context Protocol) server and CLI tool providing durable engineering memory for AI coding agents and software teams.
 
 It stores durable project knowledge so agents can retrieve the right context before writing code. That includes project summaries, architecture decisions, conventions, bug patterns, and other stable engineering knowledge.
 
@@ -66,21 +66,6 @@ npm run build
 ```bash
 npm link
 ```
-
-## 🚀 Publishing a New Release
-
-To publish a new version of `flash-mem` to NPM, ensure you are logged in (`npm login`) and your working directory is clean. Then use one of the built-in release scripts:
-
-- **Patch Release (Bug fixes)**: `npm run release:patch` (e.g., `0.1.2` -> `0.1.3`)
-- **Minor Release (New features)**: `npm run release:minor` (e.g., `0.1.2` -> `0.2.0`)
-- **Major Release (Breaking changes)**: `npm run release:major` (e.g., `0.1.2` -> `1.0.0`)
-
-These scripts will automatically:
-1. Build the project
-2. Bump the version in `package.json`
-3. Create a git commit and tag
-4. Push the changes and tags to GitHub
-5. Publish the package to NPM
 
 ## 🔌 MCP Configuration
 
