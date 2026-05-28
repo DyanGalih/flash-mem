@@ -5,15 +5,18 @@
 [![smithery badge](https://smithery.ai/badge/flash-mem)](https://smithery.ai/server/flash-mem)
 [![Made with ❤️ in Indonesia](https://img.shields.io/badge/Made_with_%E2%9D%A4%EF%B8%8F_in-Indonesia-red.svg)](https://github.com/galih/flash-mem)
 
-`flash-mem` is an MCP (Model Context Protocol) server and CLI tool providing durable engineering memory for AI coding agents and software teams.
+**Your coding agent remembers everything. No more re-explaining.**
 
-It stores durable project knowledge so agents can retrieve the right context before writing code. That includes project summaries, architecture decisions, conventions, bug patterns, and other stable engineering knowledge.
+`flash-mem` is an MCP (Model Context Protocol) server and CLI tool that provides persistent, durable engineering memory for any MCP-compatible AI coding agent (like Claude Code, Cursor, Windsurf, Roo Code, and more).
 
-If you are using AI for vibe coding, spec-driven development, or as a pair-programming partner, `flash-mem` helps keep the model grounded in your actual codebase instead of guessing from scratch every session.
+You explain the same architecture every session. You re-discover the same bugs. You re-teach the same preferences. Static context files like `CLAUDE.md` or `.cursorrules` get stale quickly and can't hold your entire project history. 
 
-The name reflects the goal of fast retrieval, fast context, and fast iteration for engineering work.
+`flash-mem` fixes this. It stores your project summaries, architecture decisions, conventions, and bug patterns, allowing your agent to dynamically retrieve the exact context it needs before it writes a single line of code.
 
-## ✨ What It Is
+**What changes?**
+In Session 1, you make an architectural decision to use `better-sqlite3` instead of an async driver. In Session 2, you ask the agent to add a new database repository. The agent automatically queries `flash-mem` via MCP, sees the previous architectural decision, and writes the correct synchronous code on the first try. No re-explaining. No copy-pasting. The agent just *knows*.
+
+## ✨ Why Use It?
 
 `flash-mem` is a memory layer for engineering work, not a source-code mirror.
 
