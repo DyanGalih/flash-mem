@@ -31,7 +31,7 @@ export interface WriteAgentInstructionsResult {
 export const AGENT_INSTRUCTION_TARGETS: AgentInstructionTargetDefinition[] = [
   { id: 'antigravity', label: 'Antigravity', filePath: 'ANTIGRAVITY.md', kind: 'antigravity' },
   { id: 'agents', label: 'Other AI Agents', filePath: 'AGENTS.md', kind: 'agent' },
-  { id: 'cursor', label: 'Cursor', filePath: '.cursorrules', kind: 'cursor' },
+  { id: 'cursor', label: 'Cursor', filePath: '.cursor/rules/flash-mem.mdc', kind: 'cursor' },
   { id: 'cline', label: 'Cline', filePath: 'CLINE.md', kind: 'cline' },
   { id: 'copilot', label: 'GitHub Copilot', filePath: '.github/copilot-instructions.md', kind: 'copilot' }
 ];
