@@ -66,6 +66,7 @@ export const speckitMemorySearchInputSchema = z.object({
 export const speckitMemorySynthesizeInputSchema = z.object({
   workspaceRoot: z.string().min(1).optional(),
   projectRoot: z.string().min(1).optional(),
+  cwd: z.string().min(1).optional(),
   featurePath: z.string().min(1).optional(),
   feature: z.string().min(1).optional(),
   query: z.string().min(1).optional(),
@@ -76,6 +77,7 @@ export const speckitMemorySynthesizeInputSchema = z.object({
 export const speckitMemoryTokenReportInputSchema = z.object({
   workspaceRoot: z.string().min(1).optional(),
   projectRoot: z.string().min(1).optional(),
+  cwd: z.string().min(1).optional(),
   featurePath: z.string().min(1).optional(),
   feature: z.string().min(1).optional(),
   query: z.string().min(1).optional(),
@@ -110,12 +112,32 @@ export const speckitMemoryInitProjectInputSchema = z.object({
   framework: z.string().min(1).optional()
 });
 
-function resolveWorkspaceRoot(inputWorkspaceRoot: string | undefined, fallback: string): string {
-  return inputWorkspaceRoot ?? fallback;
+function resolveWorkspaceRoot(inputWorkspaceRoot: string | undefined, fallback: string, inputCwd?: string): string {
+  const isHome = (p: string) => p === process.env.HOME || p === process.env.USERPROFILE;
+  const envWorkspace = process.env.WORKSPACE_ROOT || process.env.cwd || process.env.CWD;
+  const resolved = inputWorkspaceRoot ?? inputCwd ?? envWorkspace;
+  if (resolved) {
+    return resolved;
+  }
+  const cwd = process.cwd();
+  if (!isHome(cwd)) {
+    return cwd;
+  }
+  return fallback;
 }
 
-function resolveCompatibilityWorkspaceRoot(input: { workspaceRoot?: string; projectRoot?: string; path?: string; targetDirectory?: string }, fallback: string): string {
-  return input.workspaceRoot ?? input.projectRoot ?? input.path ?? input.targetDirectory ?? fallback;
+function resolveCompatibilityWorkspaceRoot(input: { workspaceRoot?: string; projectRoot?: string; path?: string; targetDirectory?: string; cwd?: string }, fallback: string): string {
+  const isHome = (p: string) => p === process.env.HOME || p === process.env.USERPROFILE;
+  const envWorkspace = process.env.WORKSPACE_ROOT || process.env.cwd || process.env.CWD;
+  const resolved = input.workspaceRoot ?? input.projectRoot ?? input.cwd ?? input.path ?? input.targetDirectory ?? envWorkspace;
+  if (resolved) {
+    return resolved;
+  }
+  const cwd = process.cwd();
+  if (!isHome(cwd)) {
+    return cwd;
+  }
+  return fallback;
 }
 
 function resolveFeatureScope(input: { featurePath?: string; feature?: string }): string | undefined {
@@ -200,7 +222,7 @@ export function createSpeckitMemorySynthesizeTool(service: MemorySynthesisServic
     description: 'Compatibility wrapper for Spec Kit memory synthesis requests.',
     schema: speckitMemorySynthesizeInputSchema,
     execute: (input: z.infer<typeof speckitMemorySynthesizeInputSchema>) => {
-      const workspaceRoot = resolveWorkspaceRoot(input.workspaceRoot ?? input.projectRoot, defaultWorkspaceRoot);
+      const workspaceRoot = resolveWorkspaceRoot(input.workspaceRoot ?? input.projectRoot, defaultWorkspaceRoot, input.cwd);
       return service.buildFeatureSynthesis({
         workspaceRoot,
         query: input.query ?? resolveFeatureScope(input) ?? (path.basename(workspaceRoot) || 'workspace'),
@@ -219,7 +241,7 @@ export function createSpeckitMemoryTokenReportTool(service: SpecKitCompatibility
     execute: (input: z.infer<typeof speckitMemoryTokenReportInputSchema>) => {
       const prepared = prepareTokenReportContext(
         service,
-        resolveWorkspaceRoot(input.workspaceRoot ?? input.projectRoot, defaultWorkspaceRoot),
+        resolveWorkspaceRoot(input.workspaceRoot ?? input.projectRoot, defaultWorkspaceRoot, input.cwd),
         resolveFeatureScope(input),
         input.query,
         input.tokenBudget
