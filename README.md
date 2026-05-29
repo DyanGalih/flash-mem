@@ -57,7 +57,7 @@ npm install -g flash-mem
 ### Development Setup (from source)
 1. Clone the repository and install dependencies:
 ```bash
-git clone https://github.com/galih/flash-mem.git
+git clone https://github.com/dyangalih/flash-mem.git
 cd flash-mem
 npm install
 ```
