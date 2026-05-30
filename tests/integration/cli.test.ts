@@ -165,6 +165,10 @@ describe('CLI Integration', () => {
 
     expect(fs.existsSync(path.join(testWorkspace, '.flash-mem'))).toBe(true);
     expect(fs.existsSync(path.join(testWorkspace, '.flash-mem/index.json'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.cursor', 'mcp.json'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.mcp.json'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.vscode', 'mcp.json'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.codex', 'config.toml'))).toBe(true);
   });
 
   it('should initialize with --json option and output structured JSON', async () => {
@@ -234,17 +238,25 @@ describe('CLI Integration', () => {
     expect(aliasPayload.success).toBe(true);
   });
 
-  it('should allow interactive init to create only the selected prompt files', async () => {
+  it('should allow interactive init to create only the selected prompt files and MCP targets', async () => {
     const { stdout, stderr } = await execAsync(`node ${cliScript} init "${testWorkspace}" --interactive`, {
       tty: true,
-      input: ['1']
+      input: ['1', '3'] // 1 for ANTIGRAVITY.md, 3 for .vscode/mcp.json
     });
 
     expect(stderr).toBe('');
     expect(stdout).toContain('flash-mem initialized successfully at:');
+    
+    // Agent instructions check
     expect(fs.existsSync(path.join(testWorkspace, 'ANTIGRAVITY.md'))).toBe(true);
     expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
     expect(fs.existsSync(path.join(testWorkspace, '.cursorrules'))).toBe(false);
+
+    // MCP configs check
+    expect(fs.existsSync(path.join(testWorkspace, '.vscode', 'mcp.json'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.cursor', 'mcp.json'))).toBe(false);
+    expect(fs.existsSync(path.join(testWorkspace, '.mcp.json'))).toBe(false);
+    expect(fs.existsSync(path.join(testWorkspace, '.codex', 'config.toml'))).toBe(false);
   });
 
   it('should export markdown backups from the CLI boundary', async () => {

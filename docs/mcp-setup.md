@@ -8,6 +8,8 @@
 
 The MCP configuration format changes slightly depending on whether you are using a desktop app like Claude or an IDE extension like VS Code, Antigravity, Cline, Roo Code, or Codex.
 
+When you run `flash-mem init .`, it also writes the versioned agent-instruction files (`AGENTS.md`, `ANTIGRAVITY.md`, `.cursor/rules/flash-mem.mdc`, `CLINE.md`, and `.github/copilot-instructions.md`) so the same memory-first protocol is available in prompt surfaces, not just MCP configs.
+
 ## At A Glance
 
 | Setup Type | Command | Workspace Argument | Best For |
@@ -65,6 +67,33 @@ Use the global `flash-mem` command and let the extension provide the current wor
 }
 ```
 
+### Antigravity IDE
+
+Antigravity IDE automatically reads the `.vscode/mcp.json` file. The VS Code extension setup above works perfectly for Antigravity IDE without any global configuration.
+
+### Antigravity CLI
+
+Antigravity CLI uses a centralized global configuration (`~/.gemini/config/mcp_config.json`).
+You do not need to configure this manually! Simply run `flash-mem init .` in your workspace, and it will automatically register your project in Antigravity's global configuration.
+
+If you prefer to configure it manually, add the following to `~/.gemini/config/mcp_config.json`:
+```json
+{
+  "mcpServers": {
+    "flash-mem": {
+      "command": "flash-mem",
+      "args": [
+        "mcp",
+        "/absolute/path/to/your/workspace"
+      ],
+      "env": {
+        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
+      }
+    }
+  }
+}
+```
+
 ## 2. Development Checkout
 
 Use this when you are working from a cloned repository and want MCP to run the built local CLI.
@@ -112,7 +141,71 @@ args = [
 enabled = true
 ```
 
-**JSON example for Antigravity, Cline, and Roo Code:**
+### Antigravity IDE
+
+Antigravity IDE automatically reads the `.vscode/mcp.json` file. The VS Code extension setup above works perfectly for Antigravity IDE. Running `flash-mem init .` will scaffold this file for you.
+
+### Antigravity CLI
+
+Antigravity CLI uses a centralized global configuration (`~/.gemini/config/mcp_config.json`).
+You do not need to configure this manually! Simply run `flash-mem init .` in your workspace, and it will automatically register your project in Antigravity's global configuration using the local CLI path.
+
+If you prefer to configure it manually, add the following to `~/.gemini/config/mcp_config.json`:
+```json
+{
+  "mcpServers": {
+    "flash-mem": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/flash-mem/dist/infrastructure/cli/index.js",
+        "mcp",
+        "/absolute/path/to/your/workspace"
+      ],
+      "env": {
+        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
+      }
+    }
+  }
+}
+```
+
+### Where To Store It
+
+`flash-mem init .` scaffolds the project-local MCP bundle inside the repository workspace. The generated files live here:
+
+```text
+<project-root>/
+  AGENTS.md
+  ANTIGRAVITY.md
+  CLINE.md
+  .cursor/rules/flash-mem.mdc
+  .github/copilot-instructions.md
+  .cursor/mcp.json
+  .mcp.json
+  .vscode/mcp.json
+  .codex/config.toml
+  .flash-mem/
+  src/
+  docs/
+```
+
+Notes:
+
+- `AGENTS.md` is the shared prompt surface for other AI agents and codifies the project memory protocol.
+- `ANTIGRAVITY.md` is the prompt surface for Antigravity.
+- `.cursor/rules/flash-mem.mdc` is the Cursor rule file written by init.
+- `CLINE.md` is the prompt surface for Cline.
+- `.github/copilot-instructions.md` is the GitHub Copilot instruction file written by init.
+- `.cursor/mcp.json` is for Cursor project-level MCP.
+- `.mcp.json` is for GitHub Copilot project-level MCP.
+- `.vscode/mcp.json` is for VS Code, Copilot, and Antigravity IDE setups that read the VS Code MCP format.
+- `.codex/config.toml` is a repo-local Codex template; Codex still reads its active config from `~/.codex/config.toml`, so copy or symlink this file there if you want Codex to use it automatically.
+
+If the agent-instruction files already exist, use `flash-mem update .` to refresh the protocol block in place without touching the surrounding content.
+
+If your client expects a different project-local path, keep the file inside the repo workspace so each project can have its own isolated MCP config.
+
+**JSON example for Cline and Roo Code:**
 ```json
 {
   "mcpServers": {
@@ -151,3 +244,4 @@ This is the most explicit option and is useful when debugging path or environmen
 - For Claude Desktop, pass the workspace path explicitly unless your host app already manages workspace switching for you.
 - For IDE extensions, omit the workspace path when the extension already provides the current working directory.
 - Keep `FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES=1` set when you want the agent to update project summaries.
+- Treat each repository as its own workspace: run `flash-mem init .` in that repo and point the MCP server at that repo root, not at `~`, so summaries and memory entries stay project-scoped.

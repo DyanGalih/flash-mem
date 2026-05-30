@@ -3,11 +3,11 @@
 [![npm version](https://img.shields.io/npm/v/flash-mem.svg)](https://www.npmjs.com/package/flash-mem)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![smithery badge](https://smithery.ai/badge/flash-mem)](https://smithery.ai/server/flash-mem)
-[![Made with ❤️ in Indonesia](https://img.shields.io/badge/Made_with_%E2%9D%A4%EF%B8%8F_in-Indonesia-red.svg)](https://github.com/galih/flash-mem)
+[![Made with ❤️ in Indonesia](https://img.shields.io/badge/Made_with_%E2%9D%A4%EF%B8%8F_in-Indonesia-red.svg)](https://github.com/DyanGalih/flash-mem)
 
 **Give your AI coding assistant a permanent memory.**
 
-`flash-mem` is an MCP (Model Context Protocol) server and CLI tool designed to provide durable engineering memory for any MCP-compatible AI agent, such as Claude Code, Cursor, Windsurf, and Roo Code.
+`flash-mem` is an MCP (Model Context Protocol) server and CLI tool designed to provide durable engineering memory for any MCP-compatible AI agent, such as Claude Code, Cursor, Windsurf, and Roo Code. For agent-assisted use, MCP is the primary integration path: connect the workspace first so the agent can read project memory before it starts making changes.
 
 Constantly reminding your AI about the same architectural rules? Tired of watching it stumble over known edge cases? Traditional static prompts like `.cursorrules` or `CLAUDE.md` quickly become outdated and simply can't scale with a complex project's history. 
 
@@ -41,11 +41,17 @@ For a reusable review prompt to check whether flash-mem was used in a task, see 
 ```bash
 flash-mem init .
 ```
-2. Connect your IDE or agent through MCP.
+2. Connect your IDE or agent through MCP so the agent can retrieve project memory before writing code.
 3. For brownfield work, refresh the markdown-backed project memory:
 ```bash
 flash-mem rebuild-index . --yes
 ```
+
+Important:
+
+- Run `flash-mem init .` inside each project root so each repository gets its own `.flash-mem` store.
+- `flash-mem init .` also scaffolds the project-local agent-instruction files and MCP config bundle for Cursor, Copilot, VS Code/Antigravity IDE, Cline, and Codex.
+- Launch the MCP server against that project root, not against your home directory, so memory stays workspace-scoped.
 
 ## 📦 Installation
 
@@ -57,7 +63,7 @@ npm install -g flash-mem
 ### Development Setup (from source)
 1. Clone the repository and install dependencies:
 ```bash
-git clone https://github.com/dyangalih/flash-mem.git
+git clone https://github.com/DyanGalih/flash-mem.git
 cd flash-mem
 npm install
 ```
@@ -74,7 +80,7 @@ npm link
 
 ## 🔌 MCP Configuration
 
-`flash-mem` is fully compatible with standard Model Context Protocol (MCP) clients. See [docs/mcp-setup.md](docs/mcp-setup.md) for grouped setup examples covering global installation, development checkouts, direct path execution, and IDE-specific configurations.
+`flash-mem` is fully compatible with standard Model Context Protocol (MCP) clients, and MCP is the expected way for an agent to use the full flash-mem toolset. See [docs/mcp-setup.md](docs/mcp-setup.md) for grouped setup examples covering global installation, development checkouts, direct path execution, and IDE-specific configurations. The CLI remains available for manual, debugging, and legacy workflows, but agent-assisted usage should be wired through MCP first.
 
 ## 📄 License
 

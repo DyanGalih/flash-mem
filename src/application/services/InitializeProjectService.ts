@@ -1,5 +1,6 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
+import * as os from 'os';
 import { ProjectMetadata, ProjectMetadataSchema } from '../../domain/entities/ProjectMetadata';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
 import { createDatabaseConnection } from '../../infrastructure/database/connection';
@@ -34,6 +35,22 @@ export const AGENT_INSTRUCTION_TARGETS: AgentInstructionTargetDefinition[] = [
   { id: 'cursor', label: 'Cursor', filePath: '.cursor/rules/flash-mem.mdc', kind: 'cursor' },
   { id: 'cline', label: 'Cline', filePath: 'CLINE.md', kind: 'cline' },
   { id: 'copilot', label: 'GitHub Copilot', filePath: '.github/copilot-instructions.md', kind: 'copilot' }
+];
+
+export type McpTargetId = 'cursor' | 'copilot' | 'vscode' | 'codex' | 'antigravity-cli';
+
+export interface McpTargetDefinition {
+  id: McpTargetId;
+  label: string;
+  filePath: string;
+}
+
+export const MCP_TARGETS: McpTargetDefinition[] = [
+  { id: 'cursor', label: 'Cursor', filePath: '.cursor/mcp.json' },
+  { id: 'copilot', label: 'GitHub Copilot', filePath: '.mcp.json' },
+  { id: 'vscode', label: 'VS Code / Antigravity IDE', filePath: '.vscode/mcp.json' },
+  { id: 'codex', label: 'Codex', filePath: '.codex/config.toml' },
+  { id: 'antigravity-cli', label: 'Antigravity CLI (Global)', filePath: '~/.gemini/config/mcp_config.json' }
 ];
 
 function buildAgentInstructionBlock(version: number): string {
@@ -80,7 +97,7 @@ export class InitializeProjectService {
    * Initializes a flash-mem workspace directory structure, metadata, database, and ignores.
    * @param targetDirectory The directory to initialize (relative or absolute).
    */
-  public execute(targetDirectory: string, options: { promptTargetIds?: AgentInstructionTargetId[] } = {}): InitializationResult {
+  public execute(targetDirectory: string, options: { promptTargetIds?: AgentInstructionTargetId[], mcpTargetIds?: McpTargetId[] } = {}): InitializationResult {
     const resolvedRoot = PathSanitizer.resolveRoot(targetDirectory);
 
     // Verify root folder exists
@@ -151,6 +168,7 @@ export class InitializeProjectService {
 
     // 6. Automatically drop agent instruction files if they don't exist
     this.writeAgentInstructions(resolvedRoot, { targetIds: options.promptTargetIds });
+    this.writeProjectMcpConfigs(resolvedRoot, { targetIds: options.mcpTargetIds });
 
     return {
       success: true,
@@ -261,6 +279,152 @@ export class InitializeProjectService {
       }
     }
   }
+
+  private writeProjectMcpConfigs(resolvedRoot: string, options: { targetIds?: McpTargetId[] } = {}): void {
+    const allTargets = [
+      {
+        id: "cursor",
+        filePath: ".cursor/mcp.json",
+        content: this.renderCursorMcpConfig(resolvedRoot)
+      },
+      {
+        id: "copilot",
+        filePath: ".mcp.json",
+        content: this.renderCopilotMcpConfig(resolvedRoot)
+      },
+      {
+        id: "vscode",
+        filePath: ".vscode/mcp.json",
+        content: this.renderVscodeMcpConfig(resolvedRoot)
+      },
+      {
+        id: "codex",
+        filePath: ".codex/config.toml",
+        content: this.renderCodexConfigTemplate(resolvedRoot)
+      }
+    ];
+
+    const targets = options.targetIds 
+      ? allTargets.filter(t => options.targetIds!.includes(t.id as McpTargetId)) 
+      : allTargets;
+
+    // Modify Antigravity global config directly if selected or if not restricted
+    if (!options.targetIds || options.targetIds.includes('antigravity-cli')) {
+      this.updateAntigravityGlobalConfig(resolvedRoot);
+    }
+
+    for (const target of targets) {
+      const filePath = path.join(resolvedRoot, target.filePath);
+      if (fs.existsSync(filePath)) {
+        continue;
+      }
+
+      fs.ensureDirSync(path.dirname(filePath));
+      fs.writeFileSync(filePath, target.content, "utf-8");
+      this.setPermissions(filePath, 0o600);
+    }
+  }
+
+  private renderCursorMcpConfig(resolvedRoot: string): string {
+    return this.renderLocalMcpJson({
+      rootKey: "mcpServers",
+      resolvedRoot,
+      includeType: false,
+      includeTools: false
+    });
+  }
+
+  private renderCopilotMcpConfig(resolvedRoot: string): string {
+    return this.renderLocalMcpJson({
+      rootKey: "mcpServers",
+      resolvedRoot,
+      includeType: true,
+      includeTools: true
+    });
+  }
+
+  private renderVscodeMcpConfig(resolvedRoot: string): string {
+    return this.renderLocalMcpJson({
+      rootKey: "servers",
+      resolvedRoot,
+      includeType: true,
+      includeTools: true
+    });
+  }
+
+  private updateAntigravityGlobalConfig(resolvedRoot: string): void {
+    const geminiConfigPath = path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json');
+    if (!fs.existsSync(geminiConfigPath)) {
+      return; // Do nothing if Antigravity is not installed or configured yet
+    }
+
+    try {
+      const raw = fs.readFileSync(geminiConfigPath, 'utf-8');
+      const config = JSON.parse(raw);
+
+      if (!config.mcpServers) {
+        config.mcpServers = {};
+      }
+
+      config.mcpServers['flash-mem'] = {
+        command: "flash-mem",
+        args: [
+          "mcp",
+          resolvedRoot
+        ],
+        env: {
+          "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
+        }
+      };
+
+      fs.writeFileSync(geminiConfigPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
+    } catch (err) {
+      // Fail silently for global config updates to not break init on permission issues
+    }
+  }
+
+  private renderLocalMcpJson(options: {
+    rootKey: "mcpServers" | "servers";
+    resolvedRoot: string;
+    includeType: boolean;
+    includeTools: boolean;
+  }): string {
+    const serverConfig: Record<string, unknown> = {
+      command: "flash-mem",
+      args: ["mcp", options.resolvedRoot],
+      env: {
+        FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES: "1"
+      }
+    };
+
+    if (options.includeType) {
+      serverConfig.type = "local";
+    }
+
+    if (options.includeTools) {
+      serverConfig.tools = ["*"];
+    }
+
+    return JSON.stringify({
+      [options.rootKey]: {
+        "flash-mem": serverConfig
+      }
+    }, null, 2) + "\n";
+  }
+
+  private renderCodexConfigTemplate(resolvedRoot: string): string {
+    return [
+      "# Project-local Codex MCP template.",
+      "# Copy or symlink this file to ~/.codex/config.toml to activate it.",
+      "",
+      "[mcp_servers.flash_mem]",
+      "command = \"flash-mem\"",
+      "args = [\"mcp\", " + JSON.stringify(resolvedRoot) + "]",
+      "enabled = true",
+      ""
+    ].join("\n");
+  }
+
 
   private buildFreshMetadata(resolvedRoot: string): ProjectMetadata {
     const projectName = this.detectProjectName(resolvedRoot);

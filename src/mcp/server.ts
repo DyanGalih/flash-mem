@@ -169,7 +169,7 @@ export function createMcpServer(context: McpServerContext) {
 
   const server = new Server({
     name: 'flash-mem',
-    version: '0.1.5'
+    version: '0.1.6'
   });
 
   // Canonical workflow tools first.

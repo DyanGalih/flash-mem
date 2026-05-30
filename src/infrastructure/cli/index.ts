@@ -8,7 +8,9 @@ import { DocSynthesisService } from '../../application/services/DocSynthesisServ
 import {
   AGENT_INSTRUCTION_TARGETS,
   AgentInstructionTargetId,
-  InitializeProjectService
+  InitializeProjectService,
+  MCP_TARGETS,
+  McpTargetId
 } from '../../application/services/InitializeProjectService';
 import { MemorySynthesisService } from '../../application/services/MemorySynthesisService';
 import { MarkdownExportService } from '../../application/services/MarkdownExportService';
@@ -273,6 +275,81 @@ async function promptForAgentInstructionTargets(targetDir: string): Promise<Agen
   }
 }
 
+async function promptForMcpTargets(targetDir: string): Promise<McpTargetId[]> {
+  if (!process.stdin.isTTY) {
+    throw new Error('Interactive mode requires a TTY terminal');
+  }
+
+  const rl = readline.createInterface({
+    input: process.stdin,
+    output: process.stderr
+  });
+
+  const linesQueue: string[] = [];
+  let pendingResolve: ((value: string) => void) | null = null;
+
+  rl.on('line', (line) => {
+    const trimmed = line.trim();
+    if (pendingResolve) {
+      const resolve = pendingResolve;
+      pendingResolve = null;
+      resolve(trimmed);
+    } else {
+      linesQueue.push(trimmed);
+    }
+  });
+
+  const ask = (query: string): Promise<string> => {
+    process.stderr.write(query);
+    const nextLine = linesQueue.shift();
+    if (nextLine !== undefined) {
+      return Promise.resolve(nextLine);
+    }
+    return new Promise((resolve) => {
+      pendingResolve = resolve;
+    });
+  };
+
+  const selectionHelp = MCP_TARGETS
+    .map((target, index) => `${index + 1}. ${target.label} (${target.filePath})`)
+    .join('\n');
+
+  try {
+    while (true) {
+      const promptText = 'Enter numbers separated by commas, or press Enter for all: ';
+
+      const input = await ask([
+        '\nSelect MCP configuration files to create:',
+        selectionHelp,
+        promptText
+      ].join('\n'));
+
+      if (input.trim() === '') {
+        return MCP_TARGETS.map((target) => target.id);
+      }
+
+      const selectedIndexes = Array.from(new Set(
+        input
+          .split(',')
+          .map((token) => Number.parseInt(token.trim(), 10))
+          .filter((value) => Number.isInteger(value) && value >= 1 && value <= MCP_TARGETS.length)
+      ));
+
+      if (selectedIndexes.length === 0) {
+        process.stderr.write('Invalid selection. Try again.\n');
+        continue;
+      }
+
+      return selectedIndexes
+        .map((index) => MCP_TARGETS[index - 1])
+        .filter((target): target is (typeof MCP_TARGETS)[number] => Boolean(target))
+        .map((target) => target.id);
+    }
+  } finally {
+    rl.close();
+  }
+}
+
 function formatSearchTable(rows: Array<Record<string, string>>): string {
   if (rows.length === 0) {
     return '';
@@ -377,13 +454,16 @@ program
       const targetDir = path.resolve(process.cwd(), dirArg);
       
       let promptTargetIds: AgentInstructionTargetId[] | undefined;
+      let mcpTargetIds: McpTargetId[] | undefined;
       
       if (options.all) {
         promptTargetIds = AGENT_INSTRUCTION_TARGETS.map(t => t.id);
+        mcpTargetIds = MCP_TARGETS.map(t => t.id);
       } else if (options.interactive || (process.stdin.isTTY && !useJson)) {
         promptTargetIds = await promptForAgentInstructionTargets(targetDir);
+        mcpTargetIds = await promptForMcpTargets(targetDir);
       }
-      const result = service.execute(targetDir, { promptTargetIds });
+      const result = service.execute(targetDir, { promptTargetIds, mcpTargetIds });
 
       if (useJson) {
         await writeStdout(JSON.stringify({

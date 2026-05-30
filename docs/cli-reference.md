@@ -9,10 +9,25 @@
 
 ### 1. Initialize Workspace
 
-Initialize a new `.flash-mem` workspace in the target directory (defaults to current directory).
+Initialize a new `.flash-mem` workspace in the target directory (defaults to current directory) and scaffold the versioned agent-instruction files plus the local MCP config bundle for the supported editors and clients.
 
 ```bash
 flash-mem init [path] [options]
+```
+
+**Options:**
+* `-j, --json`: Output structured JSON instead of plain text.
+
+If you already have prompt files in place, use `flash-mem update [path]` or the `inject-prompts` alias to refresh the embedded protocol block without touching the surrounding content.
+
+---
+
+### Update Agent Instruction Files
+
+Refresh existing agent-instruction files in place without overwriting the surrounding repository content.
+
+```bash
+flash-mem update [path] [options]
 ```
 
 **Options:**

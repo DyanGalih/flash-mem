@@ -25,6 +25,10 @@ describe('InitializeProjectService Unit', () => {
     // Folders check
     expect(fs.existsSync(path.join(testWorkspace, '.flash-mem'))).toBe(true);
     expect(fs.existsSync(path.join(testWorkspace, '.flash-mem/exports'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.cursor', 'mcp.json'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.mcp.json'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.vscode', 'mcp.json'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.codex', 'config.toml'))).toBe(true);
 
     // Metadata file check
     const indexJsonPath = path.join(testWorkspace, '.flash-mem/index.json');
@@ -84,6 +88,15 @@ describe('InitializeProjectService Unit', () => {
     expect(fs.existsSync(path.join(testWorkspace, 'ANTIGRAVITY.md'))).toBe(true);
     expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
     expect(fs.existsSync(path.join(testWorkspace, '.cursorrules'))).toBe(false);
+  });
+
+  it('should create only selected MCP targets during interactive-style init', () => {
+    service.execute(testWorkspace, { mcpTargetIds: ['vscode'] });
+
+    expect(fs.existsSync(path.join(testWorkspace, '.vscode', 'mcp.json'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.cursor', 'mcp.json'))).toBe(false);
+    expect(fs.existsSync(path.join(testWorkspace, '.mcp.json'))).toBe(false);
+    expect(fs.existsSync(path.join(testWorkspace, '.codex', 'config.toml'))).toBe(false);
   });
 
   it('should detect and update only existing prompt targets when requested', () => {
