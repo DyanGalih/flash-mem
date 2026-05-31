@@ -58,6 +58,7 @@ import {
 import { createUpdateMemoryTool } from './tools/update-memory';
 import { createUpdateProjectSummaryTool } from './tools/update-project-summary';
 import { createRestoreBackupTool } from './tools/restore-backup';
+import { formatMcpToolResult, McpToolResponseFormat } from '../infrastructure/llm/mcp-response-format';
 
 export interface McpServerContext {
   db: Database.Database;
@@ -70,12 +71,20 @@ type McpToolDefinition = {
   description: string;
   schema: unknown;
   execute: (input: any) => unknown;
+  responseFormat?: McpToolResponseFormat;
 };
 
 function createToolAlias<T extends McpToolDefinition>(tool: T, name: string): T {
   return {
     ...tool,
     name
+  };
+}
+
+function withFormattedResponse<T extends McpToolDefinition>(tool: T): T {
+  return {
+    ...tool,
+    execute: async (input: any) => formatMcpToolResult(await tool.execute(input), tool.responseFormat)
   };
 }
 
@@ -169,37 +178,37 @@ export function createMcpServer(context: McpServerContext) {
 
   const server = new Server({
     name: 'flash-mem',
-    version: '0.1.6'
+    version: '0.2.0'
   });
 
   // Canonical workflow tools first.
-  const getProjectSummaryTool = createGetProjectSummaryTool(projectSummaryService);
-  const updateProjectSummaryTool = createUpdateProjectSummaryTool(projectSummaryService, {
+  const getProjectSummaryTool = withFormattedResponse(createGetProjectSummaryTool(projectSummaryService));
+  const updateProjectSummaryTool = withFormattedResponse(createUpdateProjectSummaryTool(projectSummaryService, {
     canWriteProjectSummary: context.summaryWriteAccessEnabled === true
-  });
-  const searchMemoryTool = createSearchMemoryTool(memorySearchService);
-  const addMemoryTool = createAddMemoryTool(memoryEntryService);
-  const updateMemoryTool = createUpdateMemoryTool(memoryEntryService);
-  const addMemoryRelationshipTool = createAddMemoryRelationshipTool(memoryEntryService);
-  const rebuildIndexTool = createRebuildIndexTool(workspaceIndexingService);
-  const captureArtifactMemoryTool = createCaptureArtifactMemoryTool(artifactMemoryCaptureService);
-  const getRelevantContextTool = createGetRelevantContextTool(relevantContextService);
-  const deleteMemoryTool = createDeleteMemoryTool(memoryEntryService);
-  const exportMarkdownTool = createExportMarkdownTool(markdownExportService);
-  const indexingTool = createIndexingTool(indexingService);
-  const restoreBackupTool = createRestoreBackupTool(markdownRestoreService);
-  const prepareContextTool = createPrepareContextTool(compatibilityService, context.workspaceRoot);
-  const memorySynthesisCompatTool = createMemorySynthesisTool(memorySynthesisService, context.workspaceRoot);
-  const docSynthesisCompatTool = createDocSynthesisTool(docSynthesisService, context.workspaceRoot);
-  const tokenReportTool = createTokenReportTool(compatibilityService, context.workspaceRoot);
-  const promoteSharedLessonTool = createPromoteSharedLessonTool(compatibilityService, context.workspaceRoot);
-  const syncSharedLessonsTool = createSyncSharedLessonsTool(compatibilityService, context.workspaceRoot);
-  const initializeProjectTool = createSpeckitMemoryInitProjectTool(compatibilityService, context.workspaceRoot);
-  const speckitMemorySearchTool = createSpeckitMemorySearchTool(memorySearchService, projectRepository, context.workspaceRoot);
-  const speckitMemorySynthesizeTool = createSpeckitMemorySynthesizeTool(memorySynthesisService, context.workspaceRoot);
-  const speckitMemoryTokenReportTool = createSpeckitMemoryTokenReportTool(compatibilityService, context.workspaceRoot);
-  const speckitMemoryShareLessonTool = createSpeckitMemoryShareLessonTool(compatibilityService, context.workspaceRoot);
-  const speckitMemorySyncSharedTool = createSpeckitMemorySyncSharedTool(compatibilityService, context.workspaceRoot);
+  }));
+  const searchMemoryTool = withFormattedResponse(createSearchMemoryTool(memorySearchService));
+  const addMemoryTool = withFormattedResponse(createAddMemoryTool(memoryEntryService));
+  const updateMemoryTool = withFormattedResponse(createUpdateMemoryTool(memoryEntryService));
+  const addMemoryRelationshipTool = withFormattedResponse(createAddMemoryRelationshipTool(memoryEntryService));
+  const rebuildIndexTool = withFormattedResponse(createRebuildIndexTool(workspaceIndexingService));
+  const captureArtifactMemoryTool = withFormattedResponse(createCaptureArtifactMemoryTool(artifactMemoryCaptureService));
+  const getRelevantContextTool = withFormattedResponse(createGetRelevantContextTool(relevantContextService));
+  const deleteMemoryTool = withFormattedResponse(createDeleteMemoryTool(memoryEntryService));
+  const exportMarkdownTool = withFormattedResponse(createExportMarkdownTool(markdownExportService));
+  const indexingTool = withFormattedResponse(createIndexingTool(indexingService));
+  const restoreBackupTool = withFormattedResponse(createRestoreBackupTool(markdownRestoreService));
+  const prepareContextTool = withFormattedResponse(createPrepareContextTool(compatibilityService, context.workspaceRoot));
+  const memorySynthesisCompatTool = withFormattedResponse(createMemorySynthesisTool(memorySynthesisService, context.workspaceRoot));
+  const docSynthesisCompatTool = withFormattedResponse(createDocSynthesisTool(docSynthesisService, context.workspaceRoot));
+  const tokenReportTool = withFormattedResponse(createTokenReportTool(compatibilityService, context.workspaceRoot));
+  const promoteSharedLessonTool = withFormattedResponse(createPromoteSharedLessonTool(compatibilityService, context.workspaceRoot));
+  const syncSharedLessonsTool = withFormattedResponse(createSyncSharedLessonsTool(compatibilityService, context.workspaceRoot));
+  const initializeProjectTool = withFormattedResponse(createSpeckitMemoryInitProjectTool(compatibilityService, context.workspaceRoot));
+  const speckitMemorySearchTool = withFormattedResponse(createSpeckitMemorySearchTool(memorySearchService, projectRepository, context.workspaceRoot));
+  const speckitMemorySynthesizeTool = withFormattedResponse(createSpeckitMemorySynthesizeTool(memorySynthesisService, context.workspaceRoot));
+  const speckitMemoryTokenReportTool = withFormattedResponse(createSpeckitMemoryTokenReportTool(compatibilityService, context.workspaceRoot));
+  const speckitMemoryShareLessonTool = withFormattedResponse(createSpeckitMemoryShareLessonTool(compatibilityService, context.workspaceRoot));
+  const speckitMemorySyncSharedTool = withFormattedResponse(createSpeckitMemorySyncSharedTool(compatibilityService, context.workspaceRoot));
 
   server
     .registerTool(getProjectSummaryTool)

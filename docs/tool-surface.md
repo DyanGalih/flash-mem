@@ -29,6 +29,12 @@
 - `speckit_memory_init_project`
 - `speckit_memory_token_report`
 
+## MCP Response Formats
+
+- TOON: `get_project_summary`, `search_memory`, `get_relevant_context`, `prepare_context`, `token_report`, `speckit_memory_search`, `speckit_memory_token_report`
+- Markdown: `memory_synthesis`, `doc_synthesis`, `speckit_memory_synthesize`, `generate_memory_synthesis`, `generate_doc_synthesis`
+- JSON/plain text: write/admin tools and compatibility wrappers that mutate project state
+
 ## Compatibility Aliases
 
 - `memory_search` -> `search_memory`

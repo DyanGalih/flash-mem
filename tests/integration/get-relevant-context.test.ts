@@ -6,6 +6,7 @@ import { createDatabaseConnection } from '../../src/infrastructure/database/conn
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
 import { createMcpServer } from '../../src/mcp/server';
+import { decodeToon } from '../../src/infrastructure/llm/toon';
 
 describe('get_relevant_context tool integration', () => {
   let db: any;
@@ -85,7 +86,7 @@ describe('get_relevant_context tool integration', () => {
     expect(response.error).toBeUndefined();
     expect(response.result).toBeDefined();
 
-    const result = JSON.parse((response.result as any).content[0].text);
+    const result = await decodeToon<any>((response.result as any).content[0].text);
     expect(result).toHaveProperty('project');
     expect(result.project).toHaveProperty('id', project.id);
     expect(result).toHaveProperty('query', 'JWT');

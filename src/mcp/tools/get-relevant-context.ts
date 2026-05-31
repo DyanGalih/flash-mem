@@ -10,8 +10,9 @@ export const getRelevantContextInputSchema = z.object({
 export function createGetRelevantContextTool(service: RelevantContextService) {
   return {
     name: 'get_relevant_context',
-    description: 'Fetch the most relevant context snippets for a project query.',
+    description: 'Fetch the most relevant context snippets for a project query. Returns TOON text.',
     schema: getRelevantContextInputSchema,
+    responseFormat: 'toon' as const,
     execute: (input: z.infer<typeof getRelevantContextInputSchema>) =>
       service.getRelevantContext(input.projectId, input.query, input.limit ?? 5)
   };

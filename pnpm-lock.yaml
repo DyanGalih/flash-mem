@@ -11,6 +11,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: file:./vendor/modelcontextprotocol-sdk
         version: file:vendor/modelcontextprotocol-sdk
+      '@toon-format/toon':
+        specifier: file:./vendor/toon-format-toon
+        version: file:vendor/toon-format-toon
       better-sqlite3:
         specifier: ^11.0.0
         version: 11.10.0
@@ -333,6 +336,9 @@ packages:
 
   '@sinclair/typebox@0.27.10':
     resolution: {integrity: sha512-MTBk/3jGLNB2tVxv6uLlFh1iu64iYOQ2PbdOSK3NW8JZsmlaOh2q6sdtKowBhfw8QFLmYNzTW4/oK4uATIi6ZA==}
+
+  '@toon-format/toon@file:vendor/toon-format-toon':
+    resolution: {directory: vendor/toon-format-toon, type: directory}
 
   '@types/better-sqlite3@7.6.13':
     resolution: {integrity: sha512-NMv9ASNARoKksWtsq/SHakpYAYnhBrQgGD8zkLYk/jaK8jUGn08CfEdTRgYhMypUQAfzSP8W6gNLe0q19/t4VA==}
@@ -978,6 +984,8 @@ snapshots:
     optional: true
 
   '@sinclair/typebox@0.27.10': {}
+
+  '@toon-format/toon@file:vendor/toon-format-toon': {}
 
   '@types/better-sqlite3@7.6.13':
     dependencies:

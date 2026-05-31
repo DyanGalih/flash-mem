@@ -422,6 +422,7 @@ export class InitializeProjectService {
       "[mcp_servers.flash_mem]",
       "command = \"flash-mem\"",
       "args = [\"mcp\", " + JSON.stringify(resolvedRoot) + "]",
+      "env = { FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES = \"1\" }",
       "enabled = true",
       ""
     ].join("\n");

@@ -172,8 +172,9 @@ function resolveProjectId(input: { projectId?: string; workspaceRoot?: string; p
 export function createPrepareContextTool(service: SpecKitCompatibilityService, defaultWorkspaceRoot: string) {
   return {
     name: 'prepare_context',
-    description: 'Prepare a Spec Kit compatible context bundle for the active workspace.',
+    description: 'Prepare a Spec Kit compatible context bundle for the active workspace. Returns TOON text.',
     schema: prepareContextInputSchema,
+    responseFormat: 'toon' as const,
     execute: (input: z.infer<typeof prepareContextInputSchema>) =>
       service.prepareContext({
         workspaceRoot: resolveWorkspaceRoot(input.workspaceRoot, defaultWorkspaceRoot),
@@ -188,8 +189,9 @@ export function createPrepareContextTool(service: SpecKitCompatibilityService, d
 export function createMemorySynthesisTool(service: MemorySynthesisService, defaultWorkspaceRoot: string) {
   return {
     name: 'memory_synthesis',
-    description: 'Build a memory synthesis for a workspace or feature.',
+    description: 'Build a memory synthesis for a workspace or feature. Returns markdown text.',
     schema: memorySynthesisInputSchema,
+    responseFormat: 'markdown' as const,
     execute: (input: z.infer<typeof memorySynthesisInputSchema>) =>
       service.buildFeatureSynthesis({
         workspaceRoot: resolveWorkspaceRoot(input.workspaceRoot, defaultWorkspaceRoot),
@@ -203,8 +205,9 @@ export function createMemorySynthesisTool(service: MemorySynthesisService, defau
 export function createSpeckitMemorySearchTool(service: MemorySearchService, projectRepository: ProjectRepository, defaultWorkspaceRoot: string) {
   return {
     name: 'speckit_memory_search',
-    description: 'Compatibility wrapper for Spec Kit memory search requests.',
+    description: 'Compatibility wrapper for Spec Kit memory search requests. Returns TOON text.',
     schema: speckitMemorySearchInputSchema,
+    responseFormat: 'toon' as const,
     execute: (input: z.infer<typeof speckitMemorySearchInputSchema>) => {
       const projectId = resolveProjectId(input, projectRepository, defaultWorkspaceRoot);
       const { workspaceRoot: _workspaceRoot, projectRoot: _projectRoot, ...rest } = input;
@@ -219,8 +222,9 @@ export function createSpeckitMemorySearchTool(service: MemorySearchService, proj
 export function createSpeckitMemorySynthesizeTool(service: MemorySynthesisService, defaultWorkspaceRoot: string) {
   return {
     name: 'speckit_memory_synthesize',
-    description: 'Compatibility wrapper for Spec Kit memory synthesis requests.',
+    description: 'Compatibility wrapper for Spec Kit memory synthesis requests. Returns markdown text.',
     schema: speckitMemorySynthesizeInputSchema,
+    responseFormat: 'markdown' as const,
     execute: (input: z.infer<typeof speckitMemorySynthesizeInputSchema>) => {
       const workspaceRoot = resolveWorkspaceRoot(input.workspaceRoot ?? input.projectRoot, defaultWorkspaceRoot, input.cwd);
       return service.buildFeatureSynthesis({
@@ -236,8 +240,9 @@ export function createSpeckitMemorySynthesizeTool(service: MemorySynthesisServic
 export function createSpeckitMemoryTokenReportTool(service: SpecKitCompatibilityService, defaultWorkspaceRoot: string) {
   return {
     name: 'speckit_memory_token_report',
-    description: 'Compatibility wrapper for the Spec Kit token report workflow.',
+    description: 'Compatibility wrapper for the Spec Kit token report workflow. Returns TOON text.',
     schema: speckitMemoryTokenReportInputSchema,
+    responseFormat: 'toon' as const,
     execute: (input: z.infer<typeof speckitMemoryTokenReportInputSchema>) => {
       const prepared = prepareTokenReportContext(
         service,
@@ -311,8 +316,9 @@ export function createSpeckitMemoryInitProjectTool(service: SpecKitCompatibility
 export function createDocSynthesisTool(service: DocSynthesisService, defaultWorkspaceRoot: string) {
   return {
     name: 'doc_synthesis',
-    description: 'Build a doc synthesis for a workspace or feature.',
+    description: 'Build a doc synthesis for a workspace or feature. Returns markdown text.',
     schema: docSynthesisInputSchema,
+    responseFormat: 'markdown' as const,
     execute: (input: z.infer<typeof docSynthesisInputSchema>) =>
       service.buildDocSynthesis({
         workspaceRoot: resolveWorkspaceRoot(input.workspaceRoot, defaultWorkspaceRoot),
@@ -325,8 +331,9 @@ export function createDocSynthesisTool(service: DocSynthesisService, defaultWork
 export function createTokenReportTool(service: SpecKitCompatibilityService, defaultWorkspaceRoot: string) {
   return {
     name: 'token_report',
-    description: 'Report token usage for a workspace or feature context.',
+    description: 'Report token usage for a workspace or feature context. Returns TOON text.',
     schema: tokenReportInputSchema,
+    responseFormat: 'toon' as const,
     execute: (input: z.infer<typeof tokenReportInputSchema>) => {
       const prepared = prepareTokenReportContext(
         service,

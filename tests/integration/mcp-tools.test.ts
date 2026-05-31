@@ -5,6 +5,7 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
 import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
+import { decodeToon } from '../../src/infrastructure/llm/toon';
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
 import { createMcpServer, startMcpServer } from '../../src/mcp/server';
 
@@ -223,7 +224,7 @@ describe('MCP Server Foundation', () => {
       }
     })) as any;
 
-    const searchPayload = JSON.parse((searchResponse.result as any).content[0].text);
+    const searchPayload = await decodeToon<any>((searchResponse.result as any).content[0].text);
     expect(searchPayload.results).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: entryId })
     ]));
@@ -363,7 +364,7 @@ describe('MCP Server Foundation', () => {
 
     const response = JSON.parse(chunks.join('').trim());
     expect(response.result).toBeDefined();
-    expect(JSON.parse(response.result.content[0].text)).toMatchObject({
+    expect(await decodeToon<any>(response.result.content[0].text)).toMatchObject({
       status: 'missing'
     });
     expect(errorChunks.join('')).toBe('');
@@ -384,7 +385,7 @@ describe('MCP Server Foundation', () => {
     });
 
     expect(emptyResponse.error).toBeUndefined();
-    expect(JSON.parse((emptyResponse.result as any).content[0].text)).toMatchObject({
+    expect(await decodeToon<any>((emptyResponse.result as any).content[0].text)).toMatchObject({
       status: 'missing'
     });
 
@@ -427,7 +428,7 @@ describe('MCP Server Foundation', () => {
       }
     });
 
-    expect(JSON.parse((readyResponse.result as any).content[0].text)).toMatchObject({
+    expect(await decodeToon<any>((readyResponse.result as any).content[0].text)).toMatchObject({
       status: 'ready',
       project: expect.objectContaining({
         id: project.id
@@ -527,7 +528,7 @@ describe('MCP Server Foundation', () => {
     });
 
     expect(response.error).toBeUndefined();
-    const payload = JSON.parse((response.result as any).content[0].text);
+    const payload = await decodeToon<any>((response.result as any).content[0].text);
     expect(payload).toMatchObject({
       workspaceRoot,
       featurePath: featurePath,
@@ -614,7 +615,7 @@ describe('MCP Server Foundation', () => {
       }
     });
     expect(searchResponse.error).toBeUndefined();
-    expect(JSON.parse((searchResponse.result as any).content[0].text)).toMatchObject({
+    expect(await decodeToon<any>((searchResponse.result as any).content[0].text)).toMatchObject({
       results: expect.arrayContaining([
         expect.objectContaining({ title: 'Memory-hub compatibility' })
       ])
@@ -634,7 +635,8 @@ describe('MCP Server Foundation', () => {
       }
     });
     expect(synthesizeResponse.error).toBeUndefined();
-    expect(JSON.parse((synthesizeResponse.result as any).content[0].text)).toHaveProperty('markdown');
+    expect((synthesizeResponse.result as any).content[0].text).toContain('# Memory Synthesis');
+    expect((synthesizeResponse.result as any).content[0].text).toContain('## Relevant Decisions');
 
     const tokenReportResponse = await server.handleRequest({
       jsonrpc: '2.0',
@@ -650,7 +652,7 @@ describe('MCP Server Foundation', () => {
       }
     });
     expect(tokenReportResponse.error).toBeUndefined();
-    expect(JSON.parse((tokenReportResponse.result as any).content[0].text)).toMatchObject({
+    expect(await decodeToon<any>((tokenReportResponse.result as any).content[0].text)).toMatchObject({
       workspaceRoot,
       featurePath: path.join(workspaceRoot, 'specs', 'feature-b'),
       query: 'compatibility',

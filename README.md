@@ -52,6 +52,7 @@ Important:
 - Run `flash-mem init .` inside each project root so each repository gets its own `.flash-mem` store.
 - `flash-mem init .` also scaffolds the project-local agent-instruction files and MCP config bundle for Cursor, Copilot, VS Code/Antigravity IDE, Cline, and Codex.
 - Launch the MCP server against that project root, not against your home directory, so memory stays workspace-scoped.
+- If you use Antigravity, keep one MCP server entry per project or use a workspace-local config. A single global Antigravity entry with a fixed `cwd` or workspace path will stay pinned to that project and will not automatically follow editor workspace switches.
 
 ## 📦 Installation
 
@@ -81,6 +82,32 @@ npm link
 ## 🔌 MCP Configuration
 
 `flash-mem` is fully compatible with standard Model Context Protocol (MCP) clients, and MCP is the expected way for an agent to use the full flash-mem toolset. See [docs/mcp-setup.md](docs/mcp-setup.md) for grouped setup examples covering global installation, development checkouts, direct path execution, and IDE-specific configurations. The CLI remains available for manual, debugging, and legacy workflows, but agent-assisted usage should be wired through MCP first.
+
+Antigravity note:
+
+- The Antigravity Editor MCP config is global, so if you point `flash-mem` at a fixed workspace in that config, it will always read and write that workspace's memory.
+- Antigravity CLI supports workspace-local MCP config, which is the safest way to keep memory scoped per repository.
+- If you switch between multiple projects in the editor, create one Antigravity MCP entry per repo or update the entry's `cwd`/path to match the active repo before using memory tools.
+- Do not assume the editor will auto-switch the MCP server to the currently open workspace.
+
+Recommended pattern:
+
+```json
+{
+  "mcpServers": {
+    "flash-mem-my-repo": {
+      "command": "flash-mem",
+      "args": ["mcp"],
+      "cwd": "/absolute/path/to/my-repo",
+      "env": {
+        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
+      }
+    }
+  }
+}
+```
+
+For the CLI, put the equivalent config in `.agents/mcp_config.json` inside each repository and set `cwd` to `.` if you want the server to follow that repo automatically.
 
 ## 📄 License
 

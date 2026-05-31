@@ -29,6 +29,9 @@ describe('InitializeProjectService Unit', () => {
     expect(fs.existsSync(path.join(testWorkspace, '.mcp.json'))).toBe(true);
     expect(fs.existsSync(path.join(testWorkspace, '.vscode', 'mcp.json'))).toBe(true);
     expect(fs.existsSync(path.join(testWorkspace, '.codex', 'config.toml'))).toBe(true);
+    expect(fs.readFileSync(path.join(testWorkspace, '.codex', 'config.toml'), 'utf-8')).toContain(
+      'FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES = "1"'
+    );
 
     // Metadata file check
     const indexJsonPath = path.join(testWorkspace, '.flash-mem/index.json');

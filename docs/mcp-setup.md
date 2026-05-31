@@ -138,6 +138,7 @@ args = [
   "/absolute/path/to/flash-mem/dist/infrastructure/cli/index.js",
   "mcp"
 ]
+env = { FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES = "1" }
 enabled = true
 ```
 
