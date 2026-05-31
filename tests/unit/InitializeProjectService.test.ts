@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs-extra';
 import * as path from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { InitializeProjectService } from '../../src/application/services/InitializeProjectService';
 
 describe('InitializeProjectService Unit', () => {
@@ -116,7 +116,7 @@ describe('InitializeProjectService Unit', () => {
 
     expect(result.detected.map((target) => target.filePath)).toEqual(['ANTIGRAVITY.md']);
     expect(result.updated).toContain(targetPath);
-    expect(fs.readFileSync(targetPath, 'utf-8')).toContain('<!-- flash-mem-protocol-start v3 -->');
+    expect(fs.readFileSync(targetPath, 'utf-8')).toContain('<!-- flash-mem-protocol-start v4 -->');
     expect(fs.readFileSync(targetPath, 'utf-8')).not.toContain('unversioned flash-mem block');
     expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
   });

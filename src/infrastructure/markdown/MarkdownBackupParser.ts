@@ -1,4 +1,3 @@
-import * as path from 'path';
 import { SecretScanner } from '../safety/SecretScanner';
 
 export interface ParsedRelationship {
@@ -11,9 +10,15 @@ export interface ParsedMemoryEntry {
   title: string;
   content: string;
   category: string;
+  summary: string | null;
+  confidence: number | null;
+  createdAt: number;
   tags: string[];
+  relatedFiles: string[];
   updatedAt: number;
   sourceDocumentPath: string | null;
+  sourceDocumentChecksum: string | null;
+  sourceDocumentLastIndexedAt: number | null;
   relationships: ParsedRelationship[];
 }
 
@@ -231,9 +236,15 @@ export class MarkdownBackupParser {
 
     let id: string | null = null;
     let category: string | null = null;
+    let summary: string | null = null;
+    let confidence: number | null = null;
+    let createdAt: number | null = null;
     let tags: string[] = [];
+    let relatedFiles: string[] = [];
     let updatedAt: number | null = null;
     let sourceDocumentPath: string | null = null;
+    let sourceDocumentChecksum: string | null = null;
+    let sourceDocumentLastIndexedAt: number | null = null;
     const relationships: ParsedRelationship[] = [];
     const contentLines: string[] = [];
 
@@ -276,6 +287,26 @@ export class MarkdownBackupParser {
         } else if (meta.startsWith('Type: ') || meta.startsWith('Category: ')) {
           const isType = meta.startsWith('Type: ');
           category = meta.slice(isType ? 6 : 10).trim();
+        } else if (meta.startsWith('Summary: ')) {
+          const raw = meta.slice(9).trim();
+          summary = raw === 'not recorded' ? null : raw;
+        } else if (meta.startsWith('Confidence: ')) {
+          const raw = meta.slice(12).trim();
+          confidence = raw === 'unknown' ? null : Number(raw);
+          if (confidence !== null && Number.isNaN(confidence)) {
+            confidence = null;
+          }
+        } else if (meta.startsWith('Created: ')) {
+          const dateStr = meta.slice(9).trim();
+          const ts = Date.parse(dateStr);
+          if (!isNaN(ts)) {
+            createdAt = ts;
+          } else {
+            warnings.push(`${filename}: Entry "${title}" has an unparseable Created date "${dateStr}". Using current time.`);
+            createdAt = Date.now();
+          }
+        } else if (meta.startsWith('Related Files: ')) {
+          relatedFiles = this.parseTags(meta.slice(15).trim());
         } else if (meta.startsWith('Tags: ')) {
           tags = this.parseTags(meta.slice(6).trim());
         } else if (meta.startsWith('Updated: ')) {
@@ -292,6 +323,19 @@ export class MarkdownBackupParser {
           sourceDocumentPath = raw === 'not recorded' || raw === 'null'
             ? null
             : raw.replace(/^`|`$/g, '');
+        } else if (meta.startsWith('Source checksum: ')) {
+          const raw = meta.slice(17).trim();
+          sourceDocumentChecksum = raw === 'not recorded' || raw === 'null'
+            ? null
+            : raw.replace(/^`|`$/g, '');
+        } else if (meta.startsWith('Source last indexed: ')) {
+          const dateStr = meta.slice(21).trim();
+          const ts = Date.parse(dateStr);
+          if (!isNaN(ts)) {
+            sourceDocumentLastIndexedAt = ts;
+          } else if (dateStr !== 'not recorded') {
+            warnings.push(`${filename}: Entry "${title}" has an unparseable Source last indexed date "${dateStr}". Ignoring.`);
+          }
         }
         continue;
       }
@@ -339,14 +383,14 @@ export class MarkdownBackupParser {
       for (const w of titleWarnings) {
         warnings.push(`${filename}: [Safety] ${w.category} detected in entry title.`);
       }
-    } catch (err) {}
+    } catch (err) { }
 
     try {
       const contentWarnings = SecretScanner.scanForSecrets(rawContent);
       for (const w of contentWarnings) {
         warnings.push(`${filename}: [Safety] ${w.category} detected in entry content at line ${w.line}.`);
       }
-    } catch (err) {}
+    } catch (err) { }
 
     if (tags) {
       for (const tag of tags) {
@@ -355,7 +399,7 @@ export class MarkdownBackupParser {
           for (const w of tagWarnings) {
             warnings.push(`${filename}: [Safety] ${w.category} detected in entry tag.`);
           }
-        } catch (err) {}
+        } catch (err) { }
       }
     }
 
@@ -369,9 +413,15 @@ export class MarkdownBackupParser {
       title: safeTitle,
       content: safeContent,
       category: category ?? 'project',
+      summary: summary !== null ? SecretScanner.redact(summary) : null,
+      confidence,
+      createdAt: createdAt ?? Date.now(),
       tags: safeTags,
+      relatedFiles: relatedFiles.map((file) => SecretScanner.redact(file)),
       updatedAt: updatedAt ?? Date.now(),
       sourceDocumentPath,
+      sourceDocumentChecksum,
+      sourceDocumentLastIndexedAt,
       relationships
     };
   }

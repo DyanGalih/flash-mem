@@ -1,16 +1,16 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import * as fs from 'fs-extra';
-import * as path from 'path';
 import Database from 'better-sqlite3';
+import * as fs from 'fs-extra';
 import os from 'os';
+import * as path from 'path';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MarkdownRestoreService } from '../../src/application/services/MarkdownRestoreService';
-import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
-import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
-import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
-import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
-import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
 import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
+import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
+import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
+import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
+import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
 
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 
@@ -19,9 +19,15 @@ function buildSectionMarkdown(entries: Array<{
   id: string;
   title: string;
   type?: string;
+  summary?: string;
+  confidence?: number | null;
+  created?: string;
   tags?: string[];
+  relatedFiles?: string[];
   content: string;
   source?: string;
+  sourceChecksum?: string;
+  sourceLastIndexed?: string;
   updated?: string;
   relationships?: Array<{ type: string; target: string }>;
 }>): string {
@@ -40,9 +46,15 @@ function buildSectionMarkdown(entries: Array<{
         `## ${e.title}`,
         `- ID: ${e.id}`,
         `- Type: ${e.type ?? 'decision'}`,
+        `- Summary: ${e.summary ?? 'not recorded'}`,
+        `- Confidence: ${e.confidence ?? 'unknown'}`,
+        `- Created: ${e.created ?? '2026-05-20T00:00:00.000Z'}`,
+        `- Related Files: ${e.relatedFiles?.map((file) => `\`${file}\``).join(', ') ?? 'none'}`,
         `- Tags: ${e.tags?.map((t) => `\`${t}\``).join(', ') ?? 'none'}`,
         `- Updated: ${e.updated ?? '2026-05-20T00:00:00.000Z'}`,
         `- Source: ${e.source ?? 'not recorded'}`,
+        `- Source checksum: ${e.sourceChecksum ?? 'not recorded'}`,
+        `- Source last indexed: ${e.sourceLastIndexed ?? 'not recorded'}`,
         '',
         ...e.content.split('\n').map((l) => `> ${l}`)
       ];
@@ -194,6 +206,36 @@ describe('MarkdownRestoreService', () => {
     const tags = entryRepo.listTagsForEntry('tagged-entry');
     expect(tags).toContain('alpha');
     expect(tags).toContain('beta');
+  });
+
+  it('preserves summary, confidence, created time, and source checksum on restore', () => {
+    const md = buildSectionMarkdown([{
+      id: 'fidelity-entry',
+      title: 'Fidelity Decision',
+      summary: 'Compact summary text.',
+      confidence: 88,
+      created: '2026-05-19T10:00:00.000Z',
+      relatedFiles: ['docs/decision.md'],
+      tags: ['fidelity'],
+      content: 'Restorable content.',
+      source: 'docs/decision.md',
+      sourceChecksum: 'abc123',
+      sourceLastIndexed: '2026-05-19T11:00:00.000Z',
+      updated: '2026-05-20T12:00:00.000Z'
+    }]);
+    fs.writeFileSync(path.join(backupDir, 'fidelity.md'), md, 'utf8');
+
+    service.restore(backupDir, workspaceDir);
+
+    const row = db.prepare(`SELECT * FROM memory_entries WHERE id = 'fidelity-entry'`).get() as any;
+    expect(row.summary).toBe('Compact summary text.');
+    expect(row.confidence).toBe(88);
+    expect(new Date(row.created_at).toISOString()).toBe('2026-05-19T10:00:00.000Z');
+    expect(row.related_files).toContain('docs/decision.md');
+
+    const sourceDoc = db.prepare(`SELECT * FROM source_documents WHERE id = ?`).get(row.source_document_id) as any;
+    expect(sourceDoc.checksum).toBe('abc123');
+    expect(new Date(sourceDoc.last_indexed_at).toISOString()).toBe('2026-05-19T11:00:00.000Z');
   });
 
   it('restores relationships when both source and target entries exist', () => {

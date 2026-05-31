@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3';
 
-export const MEMORY_STORE_SCHEMA_VERSION = '1.0.0';
+export const MEMORY_STORE_SCHEMA_VERSION = '1.1.0';
 
 function tableExists(db: Database.Database, tableName: string): boolean {
   const row = db.prepare(
@@ -187,6 +187,8 @@ export function initializeMemoryStoreSchema(db: Database.Database): void {
       )
     `).run();
 
+    initializeMemoryEntriesFts(db);
+
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_memory_entries_project ON memory_entries(project_id)`).run();
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_memory_entries_hash ON memory_entries(content_hash)`).run();
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_memory_entries_deleted_at ON memory_entries(deleted_at)`).run();
@@ -225,6 +227,103 @@ export function initializeMemoryStoreSchema(db: Database.Database): void {
   });
 
   migration();
+}
+
+function initializeMemoryEntriesFts(db: Database.Database): void {
+  const statusRow = db.prepare(`
+    SELECT value
+    FROM schema_metadata
+    WHERE key = 'fts5_enabled'
+  `).get() as { value?: string } | undefined;
+
+  if (statusRow?.value === 'disabled') {
+    return;
+  }
+
+  const ftsExists = tableExists(db, 'memory_entries_fts');
+
+  try {
+    if (!ftsExists) {
+      db.prepare(`
+        CREATE VIRTUAL TABLE IF NOT EXISTS memory_entries_fts USING fts5(
+          entry_id UNINDEXED,
+          project_id UNINDEXED,
+          title,
+          summary,
+          content,
+          tags,
+          category,
+          tokenize = 'unicode61 remove_diacritics 2'
+        )
+      `).run();
+    }
+
+    rebuildMemoryEntriesFts(db);
+    upsertSchemaMetadata(db, 'fts5_enabled', 'enabled');
+  } catch {
+    upsertSchemaMetadata(db, 'fts5_enabled', 'disabled');
+  }
+}
+
+function rebuildMemoryEntriesFts(db: Database.Database): void {
+  if (!tableExists(db, 'memory_entries_fts')) {
+    return;
+  }
+
+  db.prepare(`DELETE FROM memory_entries_fts`).run();
+  db.prepare(`
+    INSERT INTO memory_entries_fts (
+      entry_id,
+      project_id,
+      title,
+      summary,
+      content,
+      tags,
+      category
+    )
+    SELECT
+      me.id,
+      me.project_id,
+      me.title,
+      COALESCE(me.summary, ''),
+      me.content,
+      COALESCE((
+        SELECT GROUP_CONCAT(tag_name, ' ')
+        FROM (
+          SELECT DISTINCT t.name AS tag_name
+          FROM memory_entry_tags met
+          INNER JOIN tags t ON t.id = met.tag_id
+          WHERE met.entry_id = me.id
+          ORDER BY tag_name ASC
+        )
+      ), ''),
+      me.category
+    FROM memory_entries me
+    WHERE me.deleted_at IS NULL
+  `).run();
+}
+
+function upsertSchemaMetadata(db: Database.Database, key: string, value: string): void {
+  const timestamp = Date.now();
+  const exists = db.prepare(`
+    SELECT 1
+    FROM schema_metadata
+    WHERE key = ?
+  `).get(key);
+
+  if (!exists) {
+    db.prepare(`
+      INSERT INTO schema_metadata (key, value, updated_at)
+      VALUES (?, ?, ?)
+    `).run(key, value, timestamp);
+    return;
+  }
+
+  db.prepare(`
+    UPDATE schema_metadata
+    SET value = ?, updated_at = ?
+    WHERE key = ?
+  `).run(value, timestamp, key);
 }
 
 export function isMemoryStoreInitialized(db: Database.Database): boolean {

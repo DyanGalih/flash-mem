@@ -1,16 +1,21 @@
 import { ExportManifest, ExportSectionMetadata } from '../../domain/entities/ExportManifest';
-import { MarkdownMetadataWriter } from './MarkdownMetadataWriter';
 import { Relationship } from '../../domain/entities/Relationship';
+import { MarkdownMetadataWriter } from './MarkdownMetadataWriter';
 
 export interface ExportedMemoryEntry {
   id: string;
   title: string;
   content: string;
   category: string;
+  summary: string | null;
+  confidence: number | null;
+  relatedFiles: string[];
   tags: string[];
-  updatedAt: number;
   createdAt: number;
+  updatedAt: number;
   sourceDocumentPath?: string | null;
+  sourceDocumentChecksum?: string | null;
+  sourceDocumentLastIndexedAt?: number | null;
   relationships: Relationship[];
 }
 
@@ -62,9 +67,15 @@ export class MarkdownExportFormatter {
         `### ${entry.title}`,
         `- ID: ${entry.id}`,
         `- Category: ${entry.category}`,
+        `- Summary: ${entry.summary && entry.summary.trim().length > 0 ? entry.summary : 'not recorded'}`,
+        `- Confidence: ${entry.confidence !== null && entry.confidence !== undefined ? entry.confidence : 'unknown'}`,
+        `- Created: ${new Date(entry.createdAt).toISOString()}`,
+        `- Related Files: ${this.formatRelatedFiles(entry.relatedFiles)}`,
         `- Tags: ${this.formatTags(entry.tags)}`,
         `- Updated: ${new Date(entry.updatedAt).toISOString()}`,
         `- Source: ${entry.sourceDocumentPath ? `\`${entry.sourceDocumentPath}\`` : 'not recorded'}`,
+        `- Source checksum: ${entry.sourceDocumentChecksum ? `\`${entry.sourceDocumentChecksum}\`` : 'not recorded'}`,
+        `- Source last indexed: ${entry.sourceDocumentLastIndexedAt ? new Date(entry.sourceDocumentLastIndexedAt).toISOString() : 'not recorded'}`,
         '',
         this.formatQuotedContent(entry.content)
       );
@@ -100,9 +111,15 @@ export class MarkdownExportFormatter {
         `## ${entry.title}`,
         `- ID: ${entry.id}`,
         `- Category: ${entry.category}`,
+        `- Summary: ${entry.summary && entry.summary.trim().length > 0 ? entry.summary : 'not recorded'}`,
+        `- Confidence: ${entry.confidence !== null && entry.confidence !== undefined ? entry.confidence : 'unknown'}`,
+        `- Created: ${new Date(entry.createdAt).toISOString()}`,
+        `- Related Files: ${this.formatRelatedFiles(entry.relatedFiles)}`,
         `- Tags: ${this.formatTags(entry.tags)}`,
         `- Updated: ${new Date(entry.updatedAt).toISOString()}`,
         `- Source: ${entry.sourceDocumentPath ? `\`${entry.sourceDocumentPath}\`` : 'not recorded'}`,
+        `- Source checksum: ${entry.sourceDocumentChecksum ? `\`${entry.sourceDocumentChecksum}\`` : 'not recorded'}`,
+        `- Source last indexed: ${entry.sourceDocumentLastIndexedAt ? new Date(entry.sourceDocumentLastIndexedAt).toISOString() : 'not recorded'}`,
         '',
         this.formatQuotedContent(entry.content)
       );
@@ -122,6 +139,10 @@ export class MarkdownExportFormatter {
 
   private formatTags(tags: string[]): string {
     return tags.length > 0 ? tags.map((tag) => `\`${tag}\``).join(', ') : 'none';
+  }
+
+  private formatRelatedFiles(relatedFiles: string[]): string {
+    return relatedFiles.length > 0 ? relatedFiles.map((file) => `\`${file}\``).join(', ') : 'none';
   }
 
   private formatQuotedContent(content: string): string {

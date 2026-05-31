@@ -1,17 +1,17 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
-import { MarkdownBackupParser, ParsedMemoryEntry } from '../../infrastructure/markdown/MarkdownBackupParser';
+import { MemoryEntry, MemoryEntrySchema } from '../../domain/entities/MemoryEntry';
 import {
-  IProjectRepository,
   IMemoryEntryRepository,
-  ITagRepository,
+  IProjectRepository,
   IRelationshipRepository,
   ISourceDocumentRepository,
+  ITagRepository,
   ITransactionRunner
 } from '../../domain/repositories/interfaces';
+import { MarkdownBackupParser, ParsedMemoryEntry } from '../../infrastructure/markdown/MarkdownBackupParser';
+import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
 import { SchemaMigrationService } from './SchemaMigrationService';
-import { MemoryEntry, MemoryEntrySchema } from '../../domain/entities/MemoryEntry';
 
 export interface RestoreResult {
   restoredEntries: number;
@@ -48,7 +48,7 @@ export class MarkdownRestoreService {
     private readonly sourceDocRepo: ISourceDocumentRepository,
     private readonly migrationService: SchemaMigrationService,
     private readonly transactionRunner: ITransactionRunner
-  ) {}
+  ) { }
 
   /**
    * Restore all memory entries from markdown backup files in the given directory.
@@ -188,8 +188,8 @@ export class MarkdownRestoreService {
           const sourceDoc = this.sourceDocRepo.upsert(
             project.id,
             parsed.sourceDocumentPath,
-            '', // No checksum available from backup
-            parsed.updatedAt
+            parsed.sourceDocumentChecksum ?? '',
+            parsed.sourceDocumentLastIndexedAt ?? parsed.updatedAt
           );
           sourceDocumentId = sourceDoc.id;
         } catch {
@@ -208,15 +208,19 @@ export class MarkdownRestoreService {
         content: parsed.content,
         contentHash,
         category: parsed.category,
+        confidence: parsed.confidence ?? null,
+        summary: parsed.summary ?? null,
+        relatedFiles: parsed.relatedFiles.length > 0 ? parsed.relatedFiles : null,
         source: parsed.sourceDocumentPath ? 'file' : 'backup',
         sourceDocumentId,
-        createdAt: parsed.updatedAt,
+        createdAt: parsed.createdAt,
         updatedAt: parsed.updatedAt,
         deletedAt: null
       });
 
       this.entryRepo.restore(entry);
       this.tagRepo.replaceEntryTags(entry.id, parsed.tags);
+      this.entryRepo.refreshSearchIndex(entry.id);
 
       result.restoredEntries++;
     }

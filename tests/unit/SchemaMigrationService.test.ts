@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
+import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 
 describe('SchemaMigrationService', () => {
   let db: any;
@@ -23,7 +23,7 @@ describe('SchemaMigrationService', () => {
     db = createDatabaseConnection(testDbFile);
     const service = new SchemaMigrationService(db);
 
-    expect(service.ensureCurrentSchema()).toBe('1.0.0');
-    expect(service.currentVersion()).toBe('1.0.0');
+    expect(service.ensureCurrentSchema()).toBe('1.1.0');
+    expect(service.currentVersion()).toBe('1.1.0');
   });
 });

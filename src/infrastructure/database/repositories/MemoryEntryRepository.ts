@@ -1,8 +1,8 @@
 import Database from 'better-sqlite3';
-import { createId, now } from '../helpers';
 import { MemoryEntry, MemoryEntryInput, MemoryEntrySchema } from '../../../domain/entities/MemoryEntry';
 import { Relationship } from '../../../domain/entities/Relationship';
 import { IMemoryEntryRepository, MemorySearchOptions } from '../../../domain/repositories/interfaces';
+import { createId, now } from '../helpers';
 
 export interface MemoryEntryRecord extends MemoryEntry {
   tags: string[];
@@ -10,7 +10,9 @@ export interface MemoryEntryRecord extends MemoryEntry {
 }
 
 export class MemoryEntryRepository implements IMemoryEntryRepository {
-  constructor(private readonly db: Database.Database) {}
+  private hasFtsSearchIndexCache: boolean | null = null;
+
+  constructor(private readonly db: Database.Database) { }
 
   public create(input: MemoryEntryInput, sourceDocumentId: string | null = null): MemoryEntry {
     const timestamp = now();
@@ -68,6 +70,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
       };
 
       this.syncLegacyEntry(updatedRecord);
+      this.refreshSearchIndex(existing.id);
       return updatedRecord;
     }
 
@@ -93,6 +96,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
     );
 
     this.syncLegacyEntry(record);
+    this.refreshSearchIndex(record.id);
     return record;
   }
 
@@ -123,6 +127,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
     );
 
     this.syncLegacyEntry(entry);
+    this.refreshSearchIndex(entry.id);
   }
 
   public update(
@@ -198,6 +203,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
     const updated = this.findById(entryId);
     if (updated) {
       this.syncLegacyEntry(updated);
+      this.refreshSearchIndex(entryId);
     }
     return updated;
   }
@@ -223,6 +229,13 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
       DELETE FROM memory_entry_tags
       WHERE entry_id = ?
     `).run(entryId);
+
+    if (this.hasFtsSearchIndex()) {
+      this.db.prepare(`
+        DELETE FROM memory_entries_fts
+        WHERE entry_id = ?
+      `).run(entryId);
+    }
 
     return result.changes > 0;
   }
@@ -266,6 +279,17 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
   }
 
   public search(options: MemorySearchOptions): Array<MemoryEntry & { tags: string[]; relationships: Relationship[]; score: number }> {
+    if (options.query?.trim() && this.hasFtsSearchIndex()) {
+      const ftsResults = this.searchWithFts({
+        ...options,
+        query: options.query.trim()
+      });
+
+      if (ftsResults.length > 0) {
+        return ftsResults;
+      }
+    }
+
     const whereClauses: string[] = ['me.deleted_at IS NULL'];
     const joins: string[] = [];
     const params: any[] = [];
@@ -385,6 +409,64 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
       .slice(0, limit);
   }
 
+  public refreshSearchIndex(entryId: string): void {
+    if (!this.hasFtsSearchIndex()) {
+      return;
+    }
+
+    const row = this.db.prepare(`
+      SELECT me.id AS entryId, me.project_id AS projectId, me.title, me.summary, me.content, me.category
+      FROM memory_entries me
+      WHERE me.id = ? AND me.deleted_at IS NULL
+    `).get(entryId) as
+      | { entryId: string; projectId: string; title: string; summary: string | null; content: string; category: string }
+      | undefined;
+
+    if (!row) {
+      this.db.prepare(`
+        DELETE FROM memory_entries_fts
+        WHERE entry_id = ?
+      `).run(entryId);
+      return;
+    }
+
+    const tags = this.db.prepare(`
+      SELECT COALESCE(GROUP_CONCAT(tag_name, ' '), '') AS tags
+      FROM (
+        SELECT DISTINCT t.name AS tag_name
+        FROM memory_entry_tags met
+        INNER JOIN tags t ON t.id = met.tag_id
+        WHERE met.entry_id = ?
+        ORDER BY tag_name ASC
+      )
+    `).get(entryId) as { tags?: string } | undefined;
+
+    this.db.prepare(`
+      DELETE FROM memory_entries_fts
+      WHERE entry_id = ?
+    `).run(entryId);
+
+    this.db.prepare(`
+      INSERT INTO memory_entries_fts (
+        entry_id,
+        project_id,
+        title,
+        summary,
+        content,
+        tags,
+        category
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      row.entryId,
+      row.projectId,
+      row.title,
+      row.summary ?? '',
+      row.content,
+      tags?.tags ?? '',
+      row.category
+    );
+  }
+
   public listAllCategories(projectId?: string): string[] {
     if (projectId) {
       const rows = this.db.prepare(`
@@ -403,6 +485,198 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
       `).all() as Array<{ category: string }>;
       return rows.map(r => r.category);
     }
+  }
+
+  private searchWithFts(options: MemorySearchOptions): Array<MemoryEntry & { tags: string[]; relationships: Relationship[]; score: number }> {
+    const query = options.query?.trim();
+    if (!query) {
+      return [];
+    }
+
+    const ftsQuery = this.buildFtsQuery(query);
+    if (!ftsQuery) {
+      return [];
+    }
+
+    const params: any[] = [ftsQuery];
+    const whereClauses: string[] = ['me.deleted_at IS NULL'];
+    const joins: string[] = [
+      `INNER JOIN (
+        SELECT entry_id, bm25(memory_entries_fts) AS fts_rank
+        FROM memory_entries_fts
+        WHERE memory_entries_fts MATCH ?
+      ) fts ON fts.entry_id = me.id`
+    ];
+
+    if (options.projectId) {
+      whereClauses.push('me.project_id = ?');
+      params.push(options.projectId);
+    }
+
+    if (options.category) {
+      whereClauses.push('me.category = ?');
+      params.push(options.category);
+    }
+
+    if (options.minConfidence !== undefined && options.minConfidence !== null) {
+      whereClauses.push('me.confidence >= ?');
+      params.push(options.minConfidence);
+    }
+
+    if (options.source) {
+      joins.push('LEFT JOIN source_documents sd ON sd.id = me.source_document_id');
+      whereClauses.push('sd.path = ?');
+      params.push(options.source);
+    }
+
+    if (options.tags && options.tags.length > 0) {
+      const tagPlaceholders = options.tags.map(() => '?').join(', ');
+      const lowerTags = options.tags.map((tag) => tag.toLowerCase());
+
+      if (options.tagOperator === 'OR') {
+        whereClauses.push(`me.id IN (
+          SELECT met.entry_id
+          FROM memory_entry_tags met
+          JOIN tags t ON t.id = met.tag_id
+          WHERE LOWER(t.name) IN (${tagPlaceholders})
+        )`);
+        params.push(...lowerTags);
+      } else {
+        whereClauses.push(`me.id IN (
+          SELECT met.entry_id
+          FROM memory_entry_tags met
+          JOIN tags t ON t.id = met.tag_id
+          WHERE LOWER(t.name) IN (${tagPlaceholders})
+          GROUP BY met.entry_id
+          HAVING COUNT(DISTINCT LOWER(t.name)) = ?
+        )`);
+        params.push(...lowerTags, lowerTags.length);
+      }
+    }
+
+    const contentSelect = options.includeContent ? 'me.content' : "''";
+    const sql = `
+      SELECT me.id, me.project_id AS projectId, me.title, ${contentSelect} AS content, me.content_hash AS contentHash,
+             me.category, me.source, me.confidence, me.summary, me.source_document_id AS sourceDocumentId,
+             me.created_at AS createdAt, me.updated_at AS updatedAt, me.deleted_at AS deletedAt,
+             fts.fts_rank AS ftsRank
+      FROM memory_entries me
+      ${joins.join('\n      ')}
+      WHERE ${whereClauses.join(' AND ')}
+    `;
+
+    const rows = this.db.prepare(sql).all(...params) as Array<any & { ftsRank: number }>;
+
+    const results = rows.map((row) => {
+      const entryTags = this.listTagsForEntry(row.id);
+      const metadataScore = this.calculateMetadataScore(row.title, row.category, entryTags, query);
+      const confidenceScore = this.calculateConfidenceScore(row.confidence);
+      const recencyScore = this.calculateRecencyScore(row.updatedAt);
+      const ftsScore = this.calculateFtsScore(row.ftsRank);
+      const score = (ftsScore * 1000) + (metadataScore * 10) + confidenceScore + recencyScore;
+      const mapped = this.mapRowToEntry(row);
+
+      return {
+        ...mapped,
+        content: options.includeContent ? (row.content ?? '') : '',
+        contentHash: options.includeContent ? mapped.contentHash : 'OMITTED',
+        tags: entryTags,
+        relationships: this.listRelationshipsForEntry(row.id),
+        score
+      };
+    });
+
+    const limit = options.limit ?? 20;
+    return results
+      .sort((left, right) => {
+        const confidenceDiff = (right.confidence ?? 0) - (left.confidence ?? 0);
+        return right.score - left.score || confidenceDiff || right.updatedAt - left.updatedAt || left.id.localeCompare(right.id);
+      })
+      .slice(0, limit);
+  }
+
+  private hasFtsSearchIndex(): boolean {
+    if (this.hasFtsSearchIndexCache !== null) {
+      return this.hasFtsSearchIndexCache;
+    }
+
+    const row = this.db.prepare(`
+      SELECT 1 AS present
+      FROM sqlite_master
+      WHERE type = 'table' AND name = 'memory_entries_fts'
+    `).get() as { present?: number } | undefined;
+
+    this.hasFtsSearchIndexCache = !!row?.present;
+    return this.hasFtsSearchIndexCache;
+  }
+
+  private buildFtsQuery(query: string): string | null {
+    const tokens = query
+      .split(/\s+/)
+      .map((token) => token.trim())
+      .filter((token) => token.length > 0)
+      .map((token) => token.replace(/["']/g, ''))
+      .filter((token) => token.length > 0);
+
+    if (tokens.length === 0) {
+      return null;
+    }
+
+    return tokens.map((token) => `"${token.replace(/"/g, '""')}"`).join(' AND ');
+  }
+
+  private calculateMetadataScore(title: string, category: string, tags: string[], query: string): number {
+    const queryLower = query.toLowerCase();
+    const titleLower = title.toLowerCase();
+    const categoryLower = category.toLowerCase();
+    const lowerTags = tags.map((tag) => tag.toLowerCase());
+
+    if (titleLower === queryLower) {
+      return 100;
+    }
+
+    if (titleLower.includes(queryLower)) {
+      return 80;
+    }
+
+    if (lowerTags.some((tag) => tag === queryLower)) {
+      return 90;
+    }
+
+    if (lowerTags.some((tag) => tag.includes(queryLower))) {
+      return 70;
+    }
+
+    if (categoryLower === queryLower) {
+      return 60;
+    }
+
+    if (categoryLower.includes(queryLower)) {
+      return 40;
+    }
+
+    return 10;
+  }
+
+  private calculateConfidenceScore(confidence: number | null | undefined): number {
+    if (confidence === null || confidence === undefined) {
+      return 0;
+    }
+
+    return Math.max(0, Math.min(100, confidence));
+  }
+
+  private calculateRecencyScore(updatedAt: number): number {
+    const ageDays = Math.max(0, (Date.now() - updatedAt) / 86_400_000);
+    return Math.max(0, 100 - Math.min(100, ageDays));
+  }
+
+  private calculateFtsScore(rawRank: number | null | undefined): number {
+    if (rawRank === null || rawRank === undefined || Number.isNaN(rawRank)) {
+      return 0;
+    }
+
+    return Math.max(0, -rawRank);
   }
 
   public listTagsForEntry(entryId: string): string[] {

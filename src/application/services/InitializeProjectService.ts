@@ -1,10 +1,10 @@
 import * as fs from 'fs-extra';
-import * as path from 'path';
 import * as os from 'os';
+import * as path from 'path';
 import { ProjectMetadata, ProjectMetadataSchema } from '../../domain/entities/ProjectMetadata';
-import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
 import { createDatabaseConnection } from '../../infrastructure/database/connection';
 import { SchemaRepository } from '../../infrastructure/database/repositories/SchemaRepository';
+import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
 
 const PROTOCOL_START_MARKER_TEXT = '<!-- flash-mem-protocol-start';
 const PROTOCOL_END_MARKER_TEXT = '<!-- flash-mem-protocol-end -->';
@@ -64,7 +64,8 @@ function buildAgentInstructionBlock(version: number): string {
     `Keep durable project memory current and easy to retrieve.`,
     ``,
     `## Rules`,
-    `- Search first: read \`get_project_summary\` and \`search_memory\` before changing code.`,
+    `- Search first: read \`get_project_summary\` and \`search_memory\` before planning, drafting, or changing code.`,
+    `- Prefer summaries, metadata, tags, confidence, and related files before loading full memory content.`,
     `- Store only durable knowledge: decisions, conventions, constraints, bugs, workflows.`,
     `- Write immediately: use \`add_memory\` for new durable facts and \`update_memory\` for changes.`,
     `- Update summaries when architecture or shared conventions change.`,
@@ -78,8 +79,9 @@ function buildAgentInstructionBlock(version: number): string {
     `## Workflow`,
     `1. Read summary.`,
     `2. Search memory.`,
-    `3. Add or update durable memory.`,
-    `4. Update summary when needed.`,
+    `3. Load full memory only when the summary is not enough.`,
+    `4. Add or update durable memory.`,
+    `5. Update summary when needed.`,
     ``,
     `Use ` + '`flash-mem update`' + ` to refresh this block if it changes.`,
     PROTOCOL_END_MARKER_TEXT
@@ -179,7 +181,7 @@ export class InitializeProjectService {
 
   // Increment this version number whenever the agent instruction template changes.
   // Existing files with an older version marker will be automatically updated.
-  private static readonly PROTOCOL_VERSION = 3;
+  private static readonly PROTOCOL_VERSION = 4;
   private static readonly PROTOCOL_START_MARKER = PROTOCOL_START_MARKER_TEXT;
   private static readonly PROTOCOL_END_MARKER = PROTOCOL_END_MARKER_TEXT;
 
@@ -304,8 +306,8 @@ export class InitializeProjectService {
       }
     ];
 
-    const targets = options.targetIds 
-      ? allTargets.filter(t => options.targetIds!.includes(t.id as McpTargetId)) 
+    const targets = options.targetIds
+      ? allTargets.filter(t => options.targetIds!.includes(t.id as McpTargetId))
       : allTargets;
 
     // Modify Antigravity global config directly if selected or if not restricted
@@ -454,7 +456,7 @@ export class InitializeProjectService {
         if (pkg.name && typeof pkg.name === 'string') {
           return this.cleanProjectName(pkg.name);
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // 2. Cargo.toml
@@ -466,7 +468,7 @@ export class InitializeProjectService {
         if (match && match[1]) {
           return this.cleanProjectName(match[1]);
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // 3. pyproject.toml
@@ -478,7 +480,7 @@ export class InitializeProjectService {
         if (match && match[1]) {
           return this.cleanProjectName(match[1]);
         }
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // Fallback: directory base name
@@ -508,6 +510,6 @@ export class InitializeProjectService {
         const prefix = (gitignoreContent.length > 0 && !gitignoreContent.endsWith('\n')) ? '\n' : '';
         fs.appendFileSync(gitignorePath, `${prefix}.flash-mem/\n`, 'utf-8');
       }
-    } catch (e) {}
+    } catch (e) { }
   }
 }

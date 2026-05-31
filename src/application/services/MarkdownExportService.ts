@@ -1,17 +1,17 @@
 import * as path from 'path';
-import { createId, now } from '../../infrastructure/database/helpers';
 import { ExportManifest, ExportManifestSchema, ExportSectionKey } from '../../domain/entities/ExportManifest';
 import { Project, ProjectSchema } from '../../domain/entities/Project';
 import {
-  IProjectRepository,
   IMemoryEntryRepository,
-  ITagRepository,
+  IProjectRepository,
   IRelationshipRepository,
-  ISourceDocumentRepository
+  ISourceDocumentRepository,
+  ITagRepository
 } from '../../domain/repositories/interfaces';
-import { SchemaMigrationService } from './SchemaMigrationService';
-import { MarkdownExportFormatter, ExportedMemoryEntry } from '../../infrastructure/markdown/MarkdownExportFormatter';
+import { createId, now } from '../../infrastructure/database/helpers';
+import { ExportedMemoryEntry, MarkdownExportFormatter } from '../../infrastructure/markdown/MarkdownExportFormatter';
 import { MarkdownExportWriter } from '../../infrastructure/markdown/MarkdownExportWriter';
+import { SchemaMigrationService } from './SchemaMigrationService';
 
 export interface MarkdownExportFileResult {
   fileName: string;
@@ -112,6 +112,7 @@ export class MarkdownExportService {
   private loadEntriesForExport(projectId: string): ExportedMemoryEntry[] {
     const entries = this.memoryEntryRepository.listByProject(projectId);
     const sourceDocuments = new Map<string, string>();
+    const sourceDocumentMetadata = new Map<string, { checksum: string; lastIndexedAt: number | null }>();
     const exportEntries: ExportedMemoryEntry[] = [];
 
     for (const entry of entries) {
@@ -119,20 +120,31 @@ export class MarkdownExportService {
         const sourceDocument = this.sourceDocumentRepository.findById(entry.sourceDocumentId);
         if (sourceDocument) {
           sourceDocuments.set(sourceDocument.id, sourceDocument.path);
+          sourceDocumentMetadata.set(sourceDocument.id, {
+            checksum: sourceDocument.checksum,
+            lastIndexedAt: sourceDocument.lastIndexedAt ?? null
+          });
         }
       }
 
       const tags = this.tagRepository.listForEntry(entry.id).map((tag) => tag.name);
       const relationships = this.relationshipRepository.listForSourceEntry(entry.id);
+      const sourceDocumentId = entry.sourceDocumentId ?? null;
+      const sourceDocumentInfo = sourceDocumentId ? sourceDocumentMetadata.get(sourceDocumentId) ?? null : null;
       exportEntries.push({
         id: entry.id,
         title: entry.title,
         content: entry.content,
         category: entry.category,
+        summary: entry.summary ?? null,
+        confidence: entry.confidence ?? null,
+        relatedFiles: entry.relatedFiles ?? [],
         tags,
-        updatedAt: entry.updatedAt,
         createdAt: entry.createdAt,
-        sourceDocumentPath: entry.sourceDocumentId ? sourceDocuments.get(entry.sourceDocumentId) ?? null : null,
+        updatedAt: entry.updatedAt,
+        sourceDocumentPath: sourceDocumentId ? sourceDocuments.get(sourceDocumentId) ?? null : null,
+        sourceDocumentChecksum: sourceDocumentInfo?.checksum ?? null,
+        sourceDocumentLastIndexedAt: sourceDocumentInfo?.lastIndexedAt ?? null,
         relationships
       });
     }

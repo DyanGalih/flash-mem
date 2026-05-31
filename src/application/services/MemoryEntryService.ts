@@ -4,17 +4,17 @@ import { MemoryEntryInput } from '../../domain/entities/MemoryEntry';
 import { Project } from '../../domain/entities/Project';
 import { RelationshipInput } from '../../domain/entities/Relationship';
 import {
-  IProjectRepository,
   IMemoryEntryRepository,
-  ITagRepository,
+  IProjectRepository,
   IRelationshipRepository,
   ISourceDocumentRepository,
+  ITagRepository,
   ITransactionRunner
 } from '../../domain/repositories/interfaces';
-import { createId, now } from '../../infrastructure/database/helpers';
+import { now } from '../../infrastructure/database/helpers';
 import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
-import { SecretScanner } from '../../infrastructure/safety/SecretScanner';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
+import { SecretScanner } from '../../infrastructure/safety/SecretScanner';
 
 export class MemoryEntryService {
   private readonly indexingInputGuard: IndexingInputGuard;
@@ -74,6 +74,8 @@ export class MemoryEntryService {
         this.relationshipRepository.upsert(project.id, entry.id, relationship);
       }
 
+      this.memoryEntryRepository.refreshSearchIndex(entry.id);
+
       return this.memoryEntryRepository.findById(entry.id);
     };
 
@@ -131,6 +133,8 @@ export class MemoryEntryService {
       if (input.tags) {
         this.tagRepository.replaceEntryTags(entryId, input.tags);
       }
+
+      this.memoryEntryRepository.refreshSearchIndex(entryId);
 
       if (input.relationships) {
         for (const relationship of input.relationships) {

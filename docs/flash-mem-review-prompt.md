@@ -2,6 +2,18 @@
 
 Use this prompt when you want an LLM to review whether flash-mem was actually used in a task.
 
+## Flash-Mem Retrieval Policy
+
+Before making code or architecture changes, query Flash-Mem for relevant existing context.
+
+Prefer summaries, metadata, tags, confidence, and related files first.
+
+Load full memory content only when summaries are insufficient or the task requires detailed historical context.
+
+Depend on Flash-Mem's retrieval contract, not on internal storage or search implementation details.
+
+Do not assume retrieval is keyword-only, LIKE-based, or tied to Markdown files.
+
 ```text
 Review your work on this task.
 

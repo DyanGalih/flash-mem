@@ -1,10 +1,10 @@
-import { Project } from '../entities/Project';
+import { IndexingRun } from '../entities/IndexingRun';
 import { MemoryEntry, MemoryEntryInput } from '../entities/MemoryEntry';
+import { Project } from '../entities/Project';
 import { ProjectSummary, ProjectSummaryInput } from '../entities/ProjectSummary';
-import { Tag } from '../entities/Tag';
 import { Relationship, RelationshipInput } from '../entities/Relationship';
 import { SourceDocument } from '../entities/SourceDocument';
-import { IndexingRun } from '../entities/IndexingRun';
+import { Tag } from '../entities/Tag';
 
 export interface ITransactionRunner {
   run<T>(work: () => T): T;
@@ -56,6 +56,7 @@ export interface IMemoryEntryRepository {
   search(options: MemorySearchOptions): Array<MemoryEntry & { tags: string[]; relationships: Relationship[]; score: number }>;
   findByProjectAndHash(projectId: string, contentHash: string, category: string): MemoryEntry | null;
   listAllCategories(projectId?: string): string[];
+  refreshSearchIndex(entryId: string): void;
 }
 
 export interface ITagRepository {
