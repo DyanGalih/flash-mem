@@ -9,6 +9,8 @@
 
 `flash-mem` is an MCP (Model Context Protocol) server and CLI tool designed to provide durable engineering memory for any MCP-compatible AI agent, such as Claude Code, Cursor, Windsurf, and Roo Code. For agent-assisted use, MCP is the primary integration path: connect the workspace first so the agent can read project memory before it starts making changes.
 
+The retrieval-first workflow is intentionally token-conscious: summary and search tools are designed to return compact context so the agent can reuse durable knowledge without pulling unnecessary history into the prompt.
+
 Constantly reminding your AI about the same architectural rules? Tired of watching it stumble over known edge cases? Traditional static prompts like `.cursorrules` or `CLAUDE.md` quickly become outdated and simply can't scale with a complex project's history. 
 
 `flash-mem` solves this by acting as a living knowledge base. It persistently stores your project's high-level summaries, core architectural decisions, coding conventions, and historical bug fixes. When your agent begins a new task, it dynamically retrieves the specific context it needs through the Model Context Protocol, ensuring it understands your codebase's unwritten rules before writing any code.
@@ -28,6 +30,8 @@ It is designed to help engineers and AI agents:
 - preserve context for agent-assisted development and SDD
 
 If you are using AI for **vibe coding**, **spec-driven development** (like using **Spec-Kit**), or as a pair-programming partner, `flash-mem` helps keep the model grounded in your actual codebase instead of guessing from scratch every session.
+
+Recent updates also expanded the MCP surface with compact response formatting and compatibility helpers, which makes memory retrieval cheaper to read and easier to reuse in longer sessions.
 
 For a deeper explanation of greenfield and brownfield workflows, see [Usage Guide](docs/usage.md).
 
