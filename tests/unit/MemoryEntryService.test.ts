@@ -1,32 +1,35 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
-import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
-import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
+import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
 import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
 import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
+import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
-import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 
 describe('MemoryEntryService', () => {
   let db: any;
   let service: MemoryEntryService;
+  let exportScheduler: { schedule: ReturnType<typeof vi.fn> };
   const testDbFile = path.resolve(__dirname, 'memory-entry-workspace', 'flashmem.sqlite');
 
   beforeEach(() => {
     fs.removeSync(path.dirname(testDbFile));
     db = createDatabaseConnection(testDbFile);
     new SchemaMigrationService(db).ensureCurrentSchema();
+    exportScheduler = { schedule: vi.fn() };
     service = new MemoryEntryService(
       new ProjectRepository(db),
       new MemoryEntryRepository(db),
       new TagRepository(db),
       new RelationshipRepository(db),
       new SourceDocumentRepository(db),
-      new SqliteTransactionRunner(db)
+      new SqliteTransactionRunner(db),
+      exportScheduler as any
     );
   });
 
@@ -60,6 +63,29 @@ describe('MemoryEntryService', () => {
 
     expect(updated?.title).toBe('Updated memory');
     expect(service.deleteMemoryEntry(created!.id)).toBe(true);
+  });
+
+  it('schedules a background export after create, update, and delete', () => {
+    const project = new ProjectRepository(db).upsertByRootPath(path.dirname(testDbFile), 'memory-entry-workspace');
+
+    const created = service.createMemoryEntry({
+      projectId: project.id,
+      title: 'Export me',
+      content: 'Export after mutation',
+      category: 'project',
+      source: 'test'
+    });
+
+    expect(exportScheduler.schedule).toHaveBeenCalledWith(path.dirname(testDbFile));
+
+    service.updateMemoryEntry(created!.id, {
+      title: 'Export me again'
+    });
+
+    expect(exportScheduler.schedule).toHaveBeenCalledTimes(2);
+
+    expect(service.deleteMemoryEntry(created!.id)).toBe(true);
+    expect(exportScheduler.schedule).toHaveBeenCalledTimes(3);
   });
 
   it('supports confidence and relatedFiles properties', () => {

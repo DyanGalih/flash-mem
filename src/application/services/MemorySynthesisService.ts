@@ -1,10 +1,10 @@
 import * as path from 'path';
+import { Project } from '../../domain/entities/Project';
+import { SynthesisResult } from '../../domain/entities/SynthesisResult';
+import { IProjectRepository } from '../../domain/repositories/interfaces';
 import { ProjectSummaryService } from './ProjectSummaryService';
 import { RelevantContextService } from './RelevantContextService';
 import { TokenBudgetService } from './TokenBudgetService';
-import { IProjectRepository } from '../../domain/repositories/interfaces';
-import { Project } from '../../domain/entities/Project';
-import { SynthesisResult } from '../../domain/entities/SynthesisResult';
 
 export interface MemorySynthesisOptions {
   workspaceRoot?: string;
@@ -19,7 +19,7 @@ export class MemorySynthesisService {
     private readonly projectSummaryService?: ProjectSummaryService,
     private readonly relevantContextService?: RelevantContextService,
     private readonly tokenBudgetService: TokenBudgetService = new TokenBudgetService()
-  ) {}
+  ) { }
 
   public async generateSynthesis(featureId: string, tokenBudget: number, workspaceRoot = process.cwd()): Promise<SynthesisResult> {
     const synthesis = this.buildFeatureSynthesis({
@@ -129,7 +129,7 @@ export class MemorySynthesisService {
     resultLimit: number;
   }): string {
     const sections: string[] = [
-      '# Memory Synthesis',
+      `# Memory Synthesis: ${input.query}`,
       '',
       `- Project: ${input.project.name}`,
       `- Workspace: \`${input.project.rootPath}\``,

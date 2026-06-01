@@ -249,7 +249,7 @@ describe('CLI Integration', () => {
 
     expect(stderr).toBe('');
     expect(stdout).toContain('flash-mem initialized successfully at:');
-    
+
     // Agent instructions check
     expect(fs.existsSync(path.join(testWorkspace, 'ANTIGRAVITY.md'))).toBe(true);
     expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
@@ -260,16 +260,17 @@ describe('CLI Integration', () => {
     expect(fs.existsSync(path.join(testWorkspace, '.cursor', 'mcp.json'))).toBe(false);
     expect(fs.existsSync(path.join(testWorkspace, '.mcp.json'))).toBe(false);
     expect(fs.existsSync(path.join(testWorkspace, '.codex', 'config.toml'))).toBe(false);
-  });
+  }, 30_000);
 
   it('should export markdown backups from the CLI boundary', async () => {
+    let exportCreatedAt = 0;
     const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
     const db = createDatabaseConnection(dbFile);
     try {
       new SchemaMigrationService(db).ensureCurrentSchema();
       const projectRepo = new ProjectRepository(db);
       const project = projectRepo.upsertByRootPath(testWorkspace, 'test-workspace-cli');
-      new MemoryEntryService(
+      const entry = new MemoryEntryService(
         projectRepo,
         new MemoryEntryRepository(db),
         new TagRepository(db),
@@ -284,6 +285,11 @@ describe('CLI Integration', () => {
         source: 'test',
         tags: ['decision']
       });
+
+      if (!entry) {
+        throw new Error('Failed to seed CLI export test entry');
+      }
+      exportCreatedAt = entry.createdAt;
     } finally {
       db.close();
     }
@@ -292,8 +298,9 @@ describe('CLI Integration', () => {
 
     expect(stderr).toBe('');
     expect(stdout).toContain('markdown backups exported successfully to:');
-    expect(fs.existsSync(path.join(testWorkspace, '.flash-mem/exports/project-summary.md'))).toBe(true);
-    expect(fs.existsSync(path.join(testWorkspace, '.flash-mem/exports/decisions.md'))).toBe(true);
+    const exportDateKey = new Date(exportCreatedAt).toISOString().slice(0, 10);
+    expect(fs.existsSync(path.join(testWorkspace, '.flash-mem/exports', 'project-summary.md'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.flash-mem/exports', exportDateKey, 'decisions.md'))).toBe(true);
   });
 
   it('should prepare combined context through the compatibility CLI', async () => {

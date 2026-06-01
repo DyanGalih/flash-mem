@@ -1,10 +1,10 @@
 import Database from 'better-sqlite3';
-import { createId, now, normalizeName } from '../helpers';
 import { Tag, TagSchema } from '../../../domain/entities/Tag';
 import { ITagRepository } from '../../../domain/repositories/interfaces';
+import { createId, normalizeName, now } from '../helpers';
 
 export class TagRepository implements ITagRepository {
-  constructor(private readonly db: Database.Database) {}
+  constructor(private readonly db: Database.Database) { }
 
   public getOrCreate(projectId: string, name: string): Tag {
     const normalizedName = normalizeName(name);
@@ -53,17 +53,12 @@ export class TagRepository implements ITagRepository {
 
   public replaceEntryTags(entryId: string, tagNames: string[]): Tag[] {
     this.db.prepare(`DELETE FROM memory_entry_tags WHERE entry_id = ?`).run(entryId);
-    this.db.prepare(`DELETE FROM entries_tags WHERE entry_id = ?`).run(entryId);
 
     const tags: Tag[] = [];
     for (const tagName of tagNames) {
       const tag = this.getOrCreateFromEntry(entryId, tagName);
       this.db.prepare(`
         INSERT OR IGNORE INTO memory_entry_tags (entry_id, tag_id)
-        VALUES (?, ?)
-      `).run(entryId, tag.id);
-      this.db.prepare(`
-        INSERT OR IGNORE INTO entries_tags (entry_id, tag_id)
         VALUES (?, ?)
       `).run(entryId, tag.id);
       tags.push(tag);

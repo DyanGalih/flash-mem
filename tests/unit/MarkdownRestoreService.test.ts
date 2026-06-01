@@ -78,6 +78,7 @@ describe('MarkdownRestoreService', () => {
   let backupDir: string;
   let db: Database.Database;
   let service: MarkdownRestoreService;
+  let exportScheduler: { schedule: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'flash-mem-restore-test-'));
@@ -91,6 +92,7 @@ describe('MarkdownRestoreService', () => {
 
     const migrationService = new SchemaMigrationService(db);
     migrationService.ensureCurrentSchema();
+    exportScheduler = { schedule: vi.fn() };
 
     service = new MarkdownRestoreService(
       new ProjectRepository(db),
@@ -99,7 +101,8 @@ describe('MarkdownRestoreService', () => {
       new RelationshipRepository(db),
       new SourceDocumentRepository(db),
       migrationService,
-      new SqliteTransactionRunner(db)
+      new SqliteTransactionRunner(db),
+      exportScheduler as any
     );
   });
 
@@ -130,6 +133,7 @@ describe('MarkdownRestoreService', () => {
     expect(row).toBeDefined();
     expect(row.title).toBe('Use TypeScript');
     expect(row.category).toBe('decision');
+    expect(exportScheduler.schedule).toHaveBeenCalledWith(workspaceDir);
   });
 
   it('restores multiple entries from multiple backup files', () => {
@@ -326,9 +330,9 @@ describe('MarkdownRestoreService', () => {
     const md = buildSectionMarkdown([{ id: 'e-readable', title: 'Readable', content: 'Good.' }]);
     fs.writeFileSync(path.join(backupDir, 'readable.md'), md, 'utf8');
 
-    // Write a directory with a .md name (triggers read error)
+    // Write malformed markdown that parser will skip.
     const fakeMdPath = path.join(backupDir, 'fake.md');
-    fs.ensureDirSync(fakeMdPath);
+    fs.writeFileSync(fakeMdPath, '# malformed\n\nThis file has no parsable entries.', 'utf8');
 
     const result = service.restore(backupDir, workspaceDir);
 

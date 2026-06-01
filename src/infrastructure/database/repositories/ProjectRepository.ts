@@ -1,10 +1,10 @@
 import Database from 'better-sqlite3';
-import { createId, now, normalizeProjectPath } from '../helpers';
 import { Project, ProjectSchema } from '../../../domain/entities/Project';
 import { IProjectRepository } from '../../../domain/repositories/interfaces';
+import { createId, normalizeProjectPath, now } from '../helpers';
 
 export class ProjectRepository implements IProjectRepository {
-  constructor(private readonly db: Database.Database) {}
+  constructor(private readonly db: Database.Database) { }
 
   public upsertByRootPath(rootPath: string, name: string): Project {
     const normalizedRootPath = normalizeProjectPath(rootPath);
@@ -85,16 +85,6 @@ export class ProjectRepository implements IProjectRepository {
   }
 
   public clearProjectData(projectId: string): void {
-    this.db.prepare(`
-      DELETE FROM entries 
-      WHERE id IN (SELECT id FROM memory_entries WHERE project_id = ?)
-    `).run(projectId);
-
-    this.db.prepare(`
-      DELETE FROM entries_tags
-      WHERE entry_id NOT IN (SELECT id FROM entries)
-    `).run();
-
     this.db.prepare(`DELETE FROM memory_entries WHERE project_id = ?`).run(projectId);
     this.db.prepare(`DELETE FROM tags WHERE project_id = ?`).run(projectId);
     this.db.prepare(`DELETE FROM relationships WHERE project_id = ?`).run(projectId);

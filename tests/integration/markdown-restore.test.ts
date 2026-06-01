@@ -1,17 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs-extra';
-import * as path from 'path';
 import os from 'os';
-import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
-import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
-import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
-import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
-import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
-import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
-import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
-import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
+import * as path from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MarkdownExportService } from '../../src/application/services/MarkdownExportService';
 import { MarkdownRestoreService } from '../../src/application/services/MarkdownRestoreService';
+import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
+import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
+import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
+import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
+import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { ProjectSummaryRepository } from '../../src/infrastructure/database/repositories/ProjectSummaryRepository';
+import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
+import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
+import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 
 async function exportWorkspace(workspaceRoot: string, dbFile: string): Promise<string> {
@@ -19,6 +20,7 @@ async function exportWorkspace(workspaceRoot: string, dbFile: string): Promise<s
   try {
     const result = await new MarkdownExportService(
       new ProjectRepository(db),
+      new ProjectSummaryRepository(db),
       new MemoryEntryRepository(db),
       new TagRepository(db),
       new RelationshipRepository(db),
@@ -147,18 +149,18 @@ describe('Markdown Restore — Integration (export → restore cycle)', () => {
       projectId: project.id,
       title: 'Source Entry',
       content: 'This is the source.',
-      category: 'project',
+      category: 'decision',
       source: 'test',
-      tags: []
+      tags: ['decision']
     })!;
 
     const target = entrySvc.createMemoryEntry({
       projectId: project.id,
       title: 'Target Entry',
       content: 'This is the target.',
-      category: 'project',
+      category: 'decision',
       source: 'test',
-      tags: []
+      tags: ['decision']
     })!;
 
     // Add the relationship after both entries exist

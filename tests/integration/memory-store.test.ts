@@ -1,18 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
-import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
-import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
-import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
-import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
-import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
-import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
-import { IndexingRunRepository } from '../../src/infrastructure/database/repositories/IndexingRunRepository';
-import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { IndexingService } from '../../src/application/services/IndexingService';
 import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { MemorySearchService } from '../../src/application/services/MemorySearchService';
-import { IndexingService } from '../../src/application/services/IndexingService';
+import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
+import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
+import { IndexingRunRepository } from '../../src/infrastructure/database/repositories/IndexingRunRepository';
+import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
+import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
+import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
+import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
+import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 
 describe('Memory Store Integration', () => {
   let db: any;
@@ -82,5 +82,10 @@ describe('Memory Store Integration', () => {
 
     expect(results.length).toBe(1);
     expect(search.search({ projectId: project.id, query: 'docs' }).results.length).toBe(1);
+
+    const entriesObject = db.prepare(`SELECT type FROM sqlite_master WHERE name = 'entries'`).get() as { type?: string };
+    const entriesTagsObject = db.prepare(`SELECT type FROM sqlite_master WHERE name = 'entries_tags'`).get() as { type?: string };
+    expect(entriesObject.type).toBe('view');
+    expect(entriesTagsObject.type).toBe('view');
   });
 });

@@ -1,18 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { exec } from 'child_process';
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { exec } from 'child_process';
-import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
-import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
-import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
+import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
 import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
 import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
+import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
-import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
-import { createMcpServer } from '../../src/mcp/server';
 import { ExportSafetyGuard } from '../../src/infrastructure/safety/ExportSafetyGuard';
+import { createMcpServer } from '../../src/mcp/server';
 
 function execCli(args: string, options: { cwd?: string } = {}): Promise<{ stdout: string; stderr: string; code: number }> {
   const cliScript = path.resolve(__dirname, '../../dist/infrastructure/cli/index.js');
@@ -167,7 +167,7 @@ describe('Safety and Secret Filtering Integration', () => {
       }
       expect(code).toBe(0);
       expect(stdout).toContain('Index rebuilt successfully!');
-      
+
       // Verify warnings printed to stderr
       expect(stderr).toContain('Safety warnings detected during indexing:');
       expect(stderr).toContain('docs/db.md:1 - Database Connection URI');
@@ -205,7 +205,7 @@ describe('Safety and Secret Filtering Integration', () => {
   describe('Export Safety & Traversal Integration (T019)', () => {
     it('blocks directory traversal attempts in ExportSafetyGuard', () => {
       const guard = new ExportSafetyGuard();
-      
+
       // Check path resolution boundaries
       expect(() => guard.resolveExportFilePath(testWorkspace, '../escaped.md')).toThrow('Directory traversal detected');
       expect(() => guard.resolveExportFilePath(testWorkspace, '/absolute/path/outside')).toThrow('Directory traversal detected');
@@ -217,13 +217,13 @@ describe('Safety and Secret Filtering Integration', () => {
       if (initResult.code !== 0) {
         console.error('init failed (export test) stdout:', initResult.stdout, 'stderr:', initResult.stderr);
       }
-      
+
       const db = createDatabaseConnection(dbFile);
       new SchemaMigrationService(db).ensureCurrentSchema();
 
       const projectRepo = new ProjectRepository(db);
       const project = projectRepo.upsertByRootPath(testWorkspace, 'safety-integration-workspace');
-      
+
       // Create memory entries using MemoryEntryService
       const memory = new MemoryEntryService(
         projectRepo,
@@ -255,7 +255,8 @@ describe('Safety and Secret Filtering Integration', () => {
       expect(stderr).toBe('');
 
       // Verify export folder is created and the file is redacted
-      const exportFile = path.join(testWorkspace, '.flash-mem', 'exports', 'decisions.md');
+      const exportDateKey = new Date().toISOString().slice(0, 10);
+      const exportFile = path.join(testWorkspace, '.flash-mem', 'exports', exportDateKey, 'decisions.md');
       expect(fs.existsSync(exportFile)).toBe(true);
 
       const content = fs.readFileSync(exportFile, 'utf8');

@@ -11,6 +11,7 @@ import {
 } from '../../domain/repositories/interfaces';
 import { MarkdownBackupParser, ParsedMemoryEntry } from '../../infrastructure/markdown/MarkdownBackupParser';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
+import { BackgroundMarkdownExportScheduler } from './BackgroundMarkdownExportScheduler';
 import { SchemaMigrationService } from './SchemaMigrationService';
 
 export interface RestoreResult {
@@ -47,7 +48,8 @@ export class MarkdownRestoreService {
     private readonly relationshipRepo: IRelationshipRepository,
     private readonly sourceDocRepo: ISourceDocumentRepository,
     private readonly migrationService: SchemaMigrationService,
-    private readonly transactionRunner: ITransactionRunner
+    private readonly transactionRunner: ITransactionRunner,
+    private readonly exportScheduler?: BackgroundMarkdownExportScheduler
   ) { }
 
   /**
@@ -109,6 +111,8 @@ export class MarkdownRestoreService {
       this.restoreRelationships(entriesById, project.id, result);
     });
 
+    this.exportScheduler?.schedule(resolvedRoot);
+
     return result;
   }
 
@@ -120,10 +124,22 @@ export class MarkdownRestoreService {
    * Scan backup directory for markdown files.
    */
   private scanBackupDirectory(resolvedBackupDir: string): string[] {
-    return fs
-      .readdirSync(resolvedBackupDir)
-      .filter((f) => f.endsWith('.md'))
-      .map((f) => path.join(resolvedBackupDir, f));
+    const mdFiles: string[] = [];
+
+    const walk = (dirPath: string): void => {
+      for (const item of fs.readdirSync(dirPath)) {
+        const fullPath = path.join(dirPath, item);
+        const stat = fs.statSync(fullPath);
+        if (stat.isDirectory()) {
+          walk(fullPath);
+        } else if (stat.isFile() && item.endsWith('.md')) {
+          mdFiles.push(fullPath);
+        }
+      }
+    };
+
+    walk(resolvedBackupDir);
+    return mdFiles.sort((left, right) => left.localeCompare(right));
   }
 
   /**

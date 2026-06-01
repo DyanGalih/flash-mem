@@ -3,8 +3,9 @@ import { Command } from 'commander';
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import * as readline from 'readline';
-import { IndexingService } from '../../application/services/IndexingService';
+import { BackgroundMarkdownExportScheduler, resolveBackgroundMarkdownExportDelayMs } from '../../application/services/BackgroundMarkdownExportScheduler';
 import { DocSynthesisService } from '../../application/services/DocSynthesisService';
+import { IndexingService } from '../../application/services/IndexingService';
 import {
   AGENT_INSTRUCTION_TARGETS,
   AgentInstructionTargetId,
@@ -12,11 +13,11 @@ import {
   MCP_TARGETS,
   McpTargetId
 } from '../../application/services/InitializeProjectService';
-import { MemorySynthesisService } from '../../application/services/MemorySynthesisService';
 import { MarkdownExportService } from '../../application/services/MarkdownExportService';
 import { MarkdownRestoreService } from '../../application/services/MarkdownRestoreService';
 import { MemoryEntryService } from '../../application/services/MemoryEntryService';
 import { MemorySearchService } from '../../application/services/MemorySearchService';
+import { MemorySynthesisService } from '../../application/services/MemorySynthesisService';
 import { ProjectSummaryService } from '../../application/services/ProjectSummaryService';
 import { RelevantContextService } from '../../application/services/RelevantContextService';
 import { SchemaMigrationService } from '../../application/services/SchemaMigrationService';
@@ -24,21 +25,25 @@ import { SharedLessonService } from '../../application/services/SharedLessonServ
 import { SpecKitCompatibilityService } from '../../application/services/SpecKitCompatibilityService';
 import { TokenBudgetService } from '../../application/services/TokenBudgetService';
 import { VALID_CATEGORIES } from '../../domain/entities/MemoryEntry';
+import { DetachedMarkdownExportLauncher } from '../../infrastructure/background/DetachedMarkdownExportLauncher';
 import { createDatabaseConnection } from '../../infrastructure/database/connection';
+import { getGlobalHubDatabase } from '../../infrastructure/database/global';
 import { IndexingRunRepository } from '../../infrastructure/database/repositories/IndexingRunRepository';
 import { MemoryEntryRepository } from '../../infrastructure/database/repositories/MemoryEntryRepository';
 import { ProjectRepository } from '../../infrastructure/database/repositories/ProjectRepository';
 import { ProjectSummaryRepository } from '../../infrastructure/database/repositories/ProjectSummaryRepository';
 import { RelationshipRepository } from '../../infrastructure/database/repositories/RelationshipRepository';
+import { SharedLessonRepository } from '../../infrastructure/database/repositories/SharedLessonRepository';
 import { SourceDocumentRepository } from '../../infrastructure/database/repositories/SourceDocumentRepository';
 import { TagRepository } from '../../infrastructure/database/repositories/TagRepository';
-import { SharedLessonRepository } from '../../infrastructure/database/repositories/SharedLessonRepository';
 import { SqliteTransactionRunner } from '../../infrastructure/database/SqliteTransactionRunner';
 import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
-import { getGlobalHubDatabase } from '../../infrastructure/database/global';
 import { startMcpServer } from '../../mcp/server';
 import { resolveWorkspaceRootForAdd } from './workspace-root';
+
+// Preserve excess interactive input between sequential prompt groups.
+const sharedInteractiveInputBuffer: string[] = [];
 
 const program = new Command();
 
@@ -166,10 +171,10 @@ function createWorkspaceCompatibilityBundle(workspaceRoot: string): WorkspaceCom
   const relevantContextService = new RelevantContextService(projectRepo, memorySearchService);
   const memorySynthesisService = new MemorySynthesisService(projectRepo, projectSummaryService, relevantContextService);
   const docSynthesisService = new DocSynthesisService();
-  
+
   const globalDb = getGlobalHubDatabase();
   const globalSharedLessonRepository = new SharedLessonRepository(globalDb);
-  
+
   const sharedLessonService = new SharedLessonService(sharedLessonRepository, globalSharedLessonRepository);
   const compatibilityService = new SpecKitCompatibilityService(
     memorySynthesisService,
@@ -208,7 +213,7 @@ async function promptForAgentInstructionTargets(targetDir: string): Promise<Agen
     output: process.stderr
   });
 
-  const linesQueue: string[] = [];
+  const linesQueue: string[] = sharedInteractiveInputBuffer.splice(0);
   let pendingResolve: ((value: string) => void) | null = null;
 
   rl.on('line', (line) => {
@@ -239,7 +244,7 @@ async function promptForAgentInstructionTargets(targetDir: string): Promise<Agen
 
   try {
     while (true) {
-      const promptText = detectedIds.length > 0 
+      const promptText = detectedIds.length > 0
         ? 'Enter numbers separated by commas, or press Enter to update detected agents: '
         : 'Enter numbers separated by commas, or press Enter for all: ';
 
@@ -271,6 +276,9 @@ async function promptForAgentInstructionTargets(targetDir: string): Promise<Agen
         .map((target) => target.id);
     }
   } finally {
+    if (linesQueue.length > 0) {
+      sharedInteractiveInputBuffer.push(...linesQueue);
+    }
     rl.close();
   }
 }
@@ -285,7 +293,7 @@ async function promptForMcpTargets(targetDir: string): Promise<McpTargetId[]> {
     output: process.stderr
   });
 
-  const linesQueue: string[] = [];
+  const linesQueue: string[] = sharedInteractiveInputBuffer.splice(0);
   let pendingResolve: ((value: string) => void) | null = null;
 
   rl.on('line', (line) => {
@@ -346,6 +354,9 @@ async function promptForMcpTargets(targetDir: string): Promise<McpTargetId[]> {
         .map((target) => target.id);
     }
   } finally {
+    if (linesQueue.length > 0) {
+      sharedInteractiveInputBuffer.push(...linesQueue);
+    }
     rl.close();
   }
 }
@@ -452,10 +463,10 @@ program
 
     try {
       const targetDir = path.resolve(process.cwd(), dirArg);
-      
+
       let promptTargetIds: AgentInstructionTargetId[] | undefined;
       let mcpTargetIds: McpTargetId[] | undefined;
-      
+
       if (options.all) {
         promptTargetIds = AGENT_INSTRUCTION_TARGETS.map(t => t.id);
         mcpTargetIds = MCP_TARGETS.map(t => t.id);
@@ -589,6 +600,7 @@ program
         new SchemaMigrationService(db).ensureCurrentSchema();
         const service = new MarkdownExportService(
           new ProjectRepository(db),
+          new ProjectSummaryRepository(db),
           new MemoryEntryRepository(db),
           new TagRepository(db),
           new RelationshipRepository(db),
@@ -848,7 +860,7 @@ program
           output: process.stderr
         });
 
-        const linesQueue: string[] = [];
+        const linesQueue: string[] = sharedInteractiveInputBuffer.splice(0);
         let pendingResolve: ((value: string) => void) | null = null;
 
         rl.on('line', (line) => {
@@ -943,6 +955,9 @@ program
             projectPath = projectPathInput.trim();
           }
         } finally {
+          if (linesQueue.length > 0) {
+            sharedInteractiveInputBuffer.push(...linesQueue);
+          }
           rl.close();
         }
       }
@@ -981,6 +996,10 @@ program
         const relationshipRepository = new RelationshipRepository(db);
         const sourceDocumentRepository = new SourceDocumentRepository(db);
         const transactionRunner = new SqliteTransactionRunner(db);
+        const backgroundExportScheduler = new BackgroundMarkdownExportScheduler(
+          new DetachedMarkdownExportLauncher({ enabled: process.env.VITEST !== 'true' && process.env.FLASH_MEM_DISABLE_BACKGROUND_EXPORT !== '1' }),
+          resolveBackgroundMarkdownExportDelayMs()
+        );
 
         const memoryEntryService = new MemoryEntryService(
           projectRepo,
@@ -988,7 +1007,8 @@ program
           tagRepository,
           relationshipRepository,
           sourceDocumentRepository,
-          transactionRunner
+          transactionRunner,
+          backgroundExportScheduler
         );
 
         const entry = memoryEntryService.createMemoryEntry({
@@ -1179,7 +1199,11 @@ program
           new RelationshipRepository(db),
           new SourceDocumentRepository(db),
           new SchemaMigrationService(db),
-          new SqliteTransactionRunner(db)
+          new SqliteTransactionRunner(db),
+          new BackgroundMarkdownExportScheduler(
+            new DetachedMarkdownExportLauncher({ enabled: process.env.VITEST !== 'true' && process.env.FLASH_MEM_DISABLE_BACKGROUND_EXPORT !== '1' }),
+            resolveBackgroundMarkdownExportDelayMs()
+          )
         );
 
         const result = service.restore(backupDirectory, workspaceRoot);

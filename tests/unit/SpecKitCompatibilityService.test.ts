@@ -1,24 +1,24 @@
 import * as fs from 'fs-extra';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
-import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
-import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
-import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
-import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
-import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
-import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
-import { ProjectSummaryRepository } from '../../src/infrastructure/database/repositories/ProjectSummaryRepository';
-import { SharedLessonRepository } from '../../src/infrastructure/database/repositories/SharedLessonRepository';
-import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
+import { DocSynthesisService } from '../../src/application/services/DocSynthesisService';
 import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { MemorySearchService } from '../../src/application/services/MemorySearchService';
+import { MemorySynthesisService } from '../../src/application/services/MemorySynthesisService';
 import { ProjectSummaryService } from '../../src/application/services/ProjectSummaryService';
 import { RelevantContextService } from '../../src/application/services/RelevantContextService';
-import { MemorySynthesisService } from '../../src/application/services/MemorySynthesisService';
-import { DocSynthesisService } from '../../src/application/services/DocSynthesisService';
+import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
 import { SharedLessonService } from '../../src/application/services/SharedLessonService';
 import { SpecKitCompatibilityService } from '../../src/application/services/SpecKitCompatibilityService';
+import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
+import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
+import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { ProjectSummaryRepository } from '../../src/infrastructure/database/repositories/ProjectSummaryRepository';
+import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
+import { SharedLessonRepository } from '../../src/infrastructure/database/repositories/SharedLessonRepository';
+import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
+import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
+import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 
 describe('SpecKitCompatibilityService', () => {
   let db: any;
@@ -107,7 +107,7 @@ describe('SpecKitCompatibilityService', () => {
       writeArtifacts: true
     });
 
-    expect(result.memorySynthesis.markdown).toContain('# Memory Synthesis');
+    expect(result.memorySynthesis.markdown).toContain('# Memory Synthesis: memory-first');
     expect(result.memorySynthesis.markdown).toContain('## Project Summary');
     expect(result.docSynthesis.markdown).toContain('# Doc Synthesis');
     expect(result.tokenReport.baselineTokens).toBeGreaterThan(0);

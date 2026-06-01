@@ -5,8 +5,8 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
 import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
-import { decodeToon } from '../../src/infrastructure/llm/toon';
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { decodeToon } from '../../src/infrastructure/llm/toon';
 import { createMcpServer, startMcpServer } from '../../src/mcp/server';
 
 describe('MCP Server Foundation', () => {
@@ -635,7 +635,7 @@ describe('MCP Server Foundation', () => {
       }
     });
     expect(synthesizeResponse.error).toBeUndefined();
-    expect((synthesizeResponse.result as any).content[0].text).toContain('# Memory Synthesis');
+    expect((synthesizeResponse.result as any).content[0].text).toContain('# Memory Synthesis: compatibility');
     expect((synthesizeResponse.result as any).content[0].text).toContain('## Relevant Decisions');
 
     const tokenReportResponse = await server.handleRequest({

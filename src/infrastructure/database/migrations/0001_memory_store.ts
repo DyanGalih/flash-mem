@@ -9,6 +9,16 @@ function tableExists(db: Database.Database, tableName: string): boolean {
   return !!row;
 }
 
+function objectType(db: Database.Database, objectName: string): 'table' | 'view' | null {
+  const row = db.prepare(
+    "SELECT type FROM sqlite_master WHERE type IN ('table','view') AND name = ?"
+  ).get(objectName) as { type?: 'table' | 'view' } | undefined;
+  if (row?.type === 'table' || row?.type === 'view') {
+    return row.type;
+  }
+  return null;
+}
+
 export function initializeMemoryStoreSchema(db: Database.Database): void {
   const migration = db.transaction(() => {
     db.prepare(`
@@ -163,28 +173,36 @@ export function initializeMemoryStoreSchema(db: Database.Database): void {
       )
     `).run();
 
-    // Compatibility tables for the existing init feature and older tests.
+    // Legacy compatibility views over canonical tables.
+    const entriesTagsType = objectType(db, 'entries_tags');
+    if (entriesTagsType === 'table') {
+      db.prepare(`DROP TABLE entries_tags`).run();
+    }
+
+    const entriesType = objectType(db, 'entries');
+    if (entriesType === 'table') {
+      db.prepare(`DROP TABLE entries`).run();
+    }
+
     db.prepare(`
-      CREATE TABLE IF NOT EXISTS entries (
-        id TEXT PRIMARY KEY,
-        hash TEXT NOT NULL,
-        type TEXT NOT NULL,
-        title TEXT NOT NULL,
-        content TEXT NOT NULL,
-        path TEXT NOT NULL,
-        created_at INTEGER NOT NULL,
-        updated_at INTEGER NOT NULL
-      )
+      CREATE VIEW IF NOT EXISTS entries AS
+      SELECT
+        id,
+        content_hash AS hash,
+        category AS type,
+        title,
+        content,
+        COALESCE(source_document_id, '') AS path,
+        created_at,
+        updated_at
+      FROM memory_entries
+      WHERE deleted_at IS NULL
     `).run();
 
     db.prepare(`
-      CREATE TABLE IF NOT EXISTS entries_tags (
-        entry_id TEXT NOT NULL,
-        tag_id TEXT NOT NULL,
-        PRIMARY KEY (entry_id, tag_id),
-        FOREIGN KEY (entry_id) REFERENCES entries(id) ON DELETE CASCADE,
-        FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
-      )
+      CREATE VIEW IF NOT EXISTS entries_tags AS
+      SELECT entry_id, tag_id
+      FROM memory_entry_tags
     `).run();
 
     initializeMemoryEntriesFts(db);
@@ -304,26 +322,33 @@ function rebuildMemoryEntriesFts(db: Database.Database): void {
 }
 
 function upsertSchemaMetadata(db: Database.Database, key: string, value: string): void {
-  const timestamp = Date.now();
-  const exists = db.prepare(`
-    SELECT 1
-    FROM schema_metadata
-    WHERE key = ?
-  `).get(key);
+  try {
+    const timestamp = Date.now();
+    const exists = db.prepare(`
+      SELECT 1
+      FROM schema_metadata
+      WHERE key = ?
+    `).get(key);
 
-  if (!exists) {
+    if (!exists) {
+      db.prepare(`
+        INSERT INTO schema_metadata (key, value, updated_at)
+        VALUES (?, ?, ?)
+      `).run(key, value, timestamp);
+      return;
+    }
+
     db.prepare(`
-      INSERT INTO schema_metadata (key, value, updated_at)
-      VALUES (?, ?, ?)
-    `).run(key, value, timestamp);
-    return;
+      UPDATE schema_metadata
+      SET value = ?, updated_at = ?
+      WHERE key = ?
+    `).run(value, timestamp, key);
+  } catch (error: any) {
+    if (error?.code === 'SQLITE_BUSY') {
+      return;
+    }
+    throw error;
   }
-
-  db.prepare(`
-    UPDATE schema_metadata
-    SET value = ?, updated_at = ?
-    WHERE key = ?
-  `).run(value, timestamp, key);
 }
 
 export function isMemoryStoreInitialized(db: Database.Database): boolean {

@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs-extra';
 import * as path from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 import { SchemaRepository } from '../../src/infrastructure/database/repositories/SchemaRepository';
 
@@ -34,7 +34,7 @@ describe('SchemaRepository Integration', () => {
 
     // Verification should now succeed
     expect(schemaRepo.verifyTablesExist()).toBe(true);
-    expect(schemaRepo.getSchemaVersion()).toBe('1.0.0');
+    expect(schemaRepo.getSchemaVersion()).toBe('1.1.0');
 
     // Verify individual tables exist and have expected columns
     const columns = db.prepare('PRAGMA table_info(entries)').all();
@@ -55,11 +55,11 @@ describe('SchemaRepository Integration', () => {
 
     schemaRepo.initializeSchema();
     expect(schemaRepo.verifyTablesExist()).toBe(true);
-    expect(schemaRepo.getSchemaVersion()).toBe('1.0.0');
+    expect(schemaRepo.getSchemaVersion()).toBe('1.1.0');
 
     // Re-running schema init should not crash or throw errors
     expect(() => schemaRepo.initializeSchema()).not.toThrow();
     expect(schemaRepo.verifyTablesExist()).toBe(true);
-    expect(schemaRepo.getSchemaVersion()).toBe('1.0.0');
+    expect(schemaRepo.getSchemaVersion()).toBe('1.1.0');
   });
 });

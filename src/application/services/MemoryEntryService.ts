@@ -15,6 +15,7 @@ import { now } from '../../infrastructure/database/helpers';
 import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
 import { SecretScanner } from '../../infrastructure/safety/SecretScanner';
+import { BackgroundMarkdownExportScheduler } from './BackgroundMarkdownExportScheduler';
 
 export class MemoryEntryService {
   private readonly indexingInputGuard: IndexingInputGuard;
@@ -25,7 +26,8 @@ export class MemoryEntryService {
     private readonly tagRepository: ITagRepository,
     private readonly relationshipRepository: IRelationshipRepository,
     private readonly sourceDocumentRepository: ISourceDocumentRepository,
-    private readonly transactionRunner: ITransactionRunner
+    private readonly transactionRunner: ITransactionRunner,
+    private readonly exportScheduler?: BackgroundMarkdownExportScheduler
   ) {
     this.indexingInputGuard = new IndexingInputGuard();
   }
@@ -79,11 +81,13 @@ export class MemoryEntryService {
       return this.memoryEntryRepository.findById(entry.id);
     };
 
-    if (options.transactional === false) {
-      return work();
-    }
+    const result = options.transactional === false
+      ? work()
+      : this.transactionRunner.run(work);
 
-    return this.transactionRunner.run(work);
+    this.exportScheduler?.schedule(project.rootPath);
+
+    return result;
   }
 
   public updateMemoryEntry(entryId: string, input: Partial<MemoryEntryInput> & { tags?: string[]; relationships?: RelationshipInput[] }) {
@@ -115,7 +119,7 @@ export class MemoryEntryService {
       redactedSummary = MemoryEntryService.extractSummary(redactedContent);
     }
 
-    return this.transactionRunner.run(() => {
+    const result = this.transactionRunner.run(() => {
       const updated = this.memoryEntryRepository.update(entryId, {
         title: redactedTitle,
         content: redactedContent,
@@ -144,10 +148,30 @@ export class MemoryEntryService {
 
       return this.memoryEntryRepository.findById(entryId);
     });
+
+    const project = this.projectRepository.findById(existing.projectId);
+    if (project) {
+      this.exportScheduler?.schedule(project.rootPath);
+    }
+
+    return result;
   }
 
   public deleteMemoryEntry(entryId: string): boolean {
-    return this.transactionRunner.run(() => this.memoryEntryRepository.softDelete(entryId));
+    const existing = this.memoryEntryRepository.findById(entryId);
+    if (!existing) {
+      return false;
+    }
+
+    const deleted = this.transactionRunner.run(() => this.memoryEntryRepository.softDelete(entryId));
+    if (deleted) {
+      const project = this.projectRepository.findById(existing.projectId);
+      if (project) {
+        this.exportScheduler?.schedule(project.rootPath);
+      }
+    }
+
+    return deleted;
   }
 
   public createProject(rootPath: string, projectName: string) {

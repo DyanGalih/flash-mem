@@ -3,13 +3,14 @@ import Database from 'better-sqlite3';
 import * as readline from 'node:readline';
 import * as path from 'path';
 import { ArtifactMemoryCaptureService } from '../application/services/ArtifactMemoryCaptureService';
+import { BackgroundMarkdownExportScheduler, resolveBackgroundMarkdownExportDelayMs } from '../application/services/BackgroundMarkdownExportScheduler';
 import { DocSynthesisService } from '../application/services/DocSynthesisService';
 import { IndexingService } from '../application/services/IndexingService';
 import { MarkdownExportService } from '../application/services/MarkdownExportService';
 import { MarkdownRestoreService } from '../application/services/MarkdownRestoreService';
 import { MemoryEntryService } from '../application/services/MemoryEntryService';
-import { MemorySynthesisService } from '../application/services/MemorySynthesisService';
 import { MemorySearchService } from '../application/services/MemorySearchService';
+import { MemorySynthesisService } from '../application/services/MemorySynthesisService';
 import { ProjectSummaryService } from '../application/services/ProjectSummaryService';
 import { RelevantContextService } from '../application/services/RelevantContextService';
 import { SchemaMigrationService } from '../application/services/SchemaMigrationService';
@@ -17,20 +18,22 @@ import { SharedLessonService } from '../application/services/SharedLessonService
 import { SpecKitCompatibilityService } from '../application/services/SpecKitCompatibilityService';
 import { TokenBudgetService } from '../application/services/TokenBudgetService';
 import { WorkspaceIndexingService } from '../application/services/WorkspaceIndexingService';
+import { DetachedMarkdownExportLauncher } from '../infrastructure/background/DetachedMarkdownExportLauncher';
+import { getGlobalHubDatabase } from '../infrastructure/database/global';
 import { IndexingRunRepository } from '../infrastructure/database/repositories/IndexingRunRepository';
 import { MemoryEntryRepository } from '../infrastructure/database/repositories/MemoryEntryRepository';
 import { ProjectRepository } from '../infrastructure/database/repositories/ProjectRepository';
 import { ProjectSummaryRepository } from '../infrastructure/database/repositories/ProjectSummaryRepository';
 import { RelationshipRepository } from '../infrastructure/database/repositories/RelationshipRepository';
+import { SharedLessonRepository } from '../infrastructure/database/repositories/SharedLessonRepository';
 import { SourceDocumentRepository } from '../infrastructure/database/repositories/SourceDocumentRepository';
 import { TagRepository } from '../infrastructure/database/repositories/TagRepository';
-import { SharedLessonRepository } from '../infrastructure/database/repositories/SharedLessonRepository';
 import { SqliteTransactionRunner } from '../infrastructure/database/SqliteTransactionRunner';
+import { formatMcpToolResult, McpToolResponseFormat } from '../infrastructure/llm/mcp-response-format';
 import { ArtifactReader } from '../infrastructure/markdown/ArtifactReader';
 import { CaptureDeduplicationGuard } from '../infrastructure/safety/CaptureDeduplicationGuard';
 import { PathSanitizer } from '../infrastructure/safety/PathSanitizer';
 import { SecretScanner } from '../infrastructure/safety/SecretScanner';
-import { getGlobalHubDatabase } from '../infrastructure/database/global';
 import { createAddMemoryTool } from './tools/add-memory';
 import { createCaptureArtifactMemoryTool } from './tools/capture-artifact-memory';
 import { createDeleteMemoryTool } from './tools/delete-memory';
@@ -40,6 +43,7 @@ import { createGetRelevantContextTool } from './tools/get-relevant-context';
 import { createIndexingTool } from './tools/indexing';
 import { createRebuildIndexTool } from './tools/rebuild-index';
 import { createAddMemoryRelationshipTool } from './tools/relationships';
+import { createRestoreBackupTool } from './tools/restore-backup';
 import { createSearchMemoryTool } from './tools/search-memory';
 import {
   createDocSynthesisTool,
@@ -57,8 +61,6 @@ import {
 } from './tools/SpecKitTools';
 import { createUpdateMemoryTool } from './tools/update-memory';
 import { createUpdateProjectSummaryTool } from './tools/update-project-summary';
-import { createRestoreBackupTool } from './tools/restore-backup';
-import { formatMcpToolResult, McpToolResponseFormat } from '../infrastructure/llm/mcp-response-format';
 
 export interface McpServerContext {
   db: Database.Database;
@@ -98,6 +100,10 @@ export function createMcpServer(context: McpServerContext) {
   const sourceDocumentRepository = new SourceDocumentRepository(context.db);
   const indexingRunRepository = new IndexingRunRepository(context.db);
   const transactionRunner = new SqliteTransactionRunner(context.db);
+  const backgroundExportScheduler = new BackgroundMarkdownExportScheduler(
+    new DetachedMarkdownExportLauncher({ enabled: process.env.VITEST !== 'true' && process.env.FLASH_MEM_DISABLE_BACKGROUND_EXPORT !== '1' }),
+    resolveBackgroundMarkdownExportDelayMs()
+  );
 
   const memoryEntryService = new MemoryEntryService(
     projectRepository,
@@ -105,7 +111,8 @@ export function createMcpServer(context: McpServerContext) {
     tagRepository,
     relationshipRepository,
     sourceDocumentRepository,
-    transactionRunner
+    transactionRunner,
+    backgroundExportScheduler
   );
   const memorySearchService = new MemorySearchService(memoryEntryRepository, tagRepository, projectRepository);
   const schemaMigrationService = new SchemaMigrationService(context.db);
@@ -131,6 +138,7 @@ export function createMcpServer(context: McpServerContext) {
   );
   const markdownExportService = new MarkdownExportService(
     projectRepository,
+    projectSummaryRepository,
     memoryEntryRepository,
     tagRepository,
     relationshipRepository,
@@ -144,7 +152,8 @@ export function createMcpServer(context: McpServerContext) {
     relationshipRepository,
     sourceDocumentRepository,
     schemaMigrationService,
-    transactionRunner
+    transactionRunner,
+    backgroundExportScheduler
   );
   const projectSummaryService = new ProjectSummaryService(
     workspaceProject.id,

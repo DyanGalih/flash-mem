@@ -69,7 +69,6 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
         deletedAt: null
       };
 
-      this.syncLegacyEntry(updatedRecord);
       this.refreshSearchIndex(existing.id);
       return updatedRecord;
     }
@@ -95,7 +94,6 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
       record.deletedAt ?? null
     );
 
-    this.syncLegacyEntry(record);
     this.refreshSearchIndex(record.id);
     return record;
   }
@@ -126,7 +124,6 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
       entry.deletedAt ?? null
     );
 
-    this.syncLegacyEntry(entry);
     this.refreshSearchIndex(entry.id);
   }
 
@@ -202,7 +199,6 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
 
     const updated = this.findById(entryId);
     if (updated) {
-      this.syncLegacyEntry(updated);
       this.refreshSearchIndex(entryId);
     }
     return updated;
@@ -214,16 +210,6 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
       SET deleted_at = ?
       WHERE id = ? AND deleted_at IS NULL
     `).run(now(), entryId);
-
-    this.db.prepare(`
-      DELETE FROM entries
-      WHERE id = ?
-    `).run(entryId);
-
-    this.db.prepare(`
-      DELETE FROM entries_tags
-      WHERE entry_id = ?
-    `).run(entryId);
 
     this.db.prepare(`
       DELETE FROM memory_entry_tags
@@ -691,14 +677,6 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
     return rows.map((row) => row.name);
   }
 
-  public replaceLegacyTags(entryId: string, tagIds: string[]): void {
-    this.db.prepare(`DELETE FROM entries_tags WHERE entry_id = ?`).run(entryId);
-    const insert = this.db.prepare(`INSERT OR IGNORE INTO entries_tags (entry_id, tag_id) VALUES (?, ?)`);
-    for (const tagId of tagIds) {
-      insert.run(entryId, tagId);
-    }
-  }
-
   public listRelationshipsForEntry(entryId: string): Relationship[] {
     const rows = this.db.prepare(`
       SELECT id, project_id AS projectId, source_entry_id AS sourceEntryId,
@@ -713,30 +691,6 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
 
   private hashContent(title: string, content: string, category: string): string {
     return Buffer.from(`${title}\n${content}\n${category}`).toString('base64');
-  }
-
-  private syncLegacyEntry(entry: MemoryEntry): void {
-    this.db.prepare(`
-      INSERT INTO entries (id, hash, type, title, content, path, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(id) DO UPDATE SET
-        hash = excluded.hash,
-        type = excluded.type,
-        title = excluded.title,
-        content = excluded.content,
-        path = excluded.path,
-        created_at = excluded.created_at,
-        updated_at = excluded.updated_at
-    `).run(
-      entry.id,
-      entry.contentHash,
-      entry.category,
-      entry.title,
-      entry.content,
-      entry.sourceDocumentId ?? '',
-      entry.createdAt,
-      entry.updatedAt
-    );
   }
 
   private mapRowToEntry(row: any): MemoryEntry {

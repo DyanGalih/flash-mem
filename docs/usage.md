@@ -68,3 +68,6 @@ When you are moving from spec to plan to implementation, use the compatibility h
 
 - Greenfield: build memory as you design the system
 - Brownfield: recover memory first, then extend it as you change the codebase
+- Memory write operations now schedule markdown backup export in the background; manual `flash-mem export markdown` still works when you want an explicit snapshot.
+- Set `FLASH_MEM_BACKGROUND_EXPORT_DELAY_MS` to change the debounce delay used before the background export worker launches.
+- Markdown exports are sharded by export date into nested folders so individual files stay below the secret-scanning size limit.

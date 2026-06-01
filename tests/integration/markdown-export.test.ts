@@ -1,15 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs-extra';
 import * as path from 'path';
-import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { MarkdownExportService } from '../../src/application/services/MarkdownExportService';
+import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
-import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
-import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
+import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
+import { ProjectSummaryRepository } from '../../src/infrastructure/database/repositories/ProjectSummaryRepository';
 import { RelationshipRepository } from '../../src/infrastructure/database/repositories/RelationshipRepository';
 import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
-import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
-import { MarkdownExportService } from '../../src/application/services/MarkdownExportService';
+import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 
 describe('Markdown export integration', () => {
@@ -68,6 +69,7 @@ describe('Markdown export integration', () => {
 
     const result = await new MarkdownExportService(
       new ProjectRepository(db),
+      new ProjectSummaryRepository(db),
       new MemoryEntryRepository(db),
       new TagRepository(db),
       new RelationshipRepository(db),
@@ -75,12 +77,14 @@ describe('Markdown export integration', () => {
       new SchemaMigrationService(db)
     ).exportWorkspace(testWorkspace);
 
+    const exportDateKey = new Date(project.createdAt).toISOString().slice(0, 10);
+
     expect(result.manifest.totalEntries).toBe(2);
     expect(fs.existsSync(path.join(exportRoot, 'project-summary.md'))).toBe(true);
-    expect(fs.existsSync(path.join(exportRoot, 'decisions.md'))).toBe(true);
-    expect(fs.existsSync(path.join(exportRoot, 'security-notes.md'))).toBe(true);
+    expect(fs.existsSync(path.join(exportRoot, exportDateKey, 'decisions.md'))).toBe(true);
+    expect(fs.existsSync(path.join(exportRoot, exportDateKey, 'security-notes.md'))).toBe(true);
     expect(fs.existsSync(path.join(exportRoot, 'unrelated.txt'))).toBe(true);
-    expect(fs.readFileSync(path.join(exportRoot, 'security-notes.md'), 'utf8')).toContain('[REDACTED_SECRET]');
+    expect(fs.readFileSync(path.join(exportRoot, exportDateKey, 'security-notes.md'), 'utf8')).toContain('[REDACTED_SECRET]');
   });
 
   it('exports a representative workspace in under 2 minutes', async () => {
@@ -100,6 +104,7 @@ describe('Markdown export integration', () => {
     const startedAt = Date.now();
     await new MarkdownExportService(
       new ProjectRepository(db),
+      new ProjectSummaryRepository(db),
       new MemoryEntryRepository(db),
       new TagRepository(db),
       new RelationshipRepository(db),
