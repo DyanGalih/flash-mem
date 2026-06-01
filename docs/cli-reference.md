@@ -16,6 +16,11 @@ flash-mem init [path] [options]
 ```
 
 **Options:**
+* `-a, --all`: Skip interactive prompt and create instruction files for all supported agents.
+* `-i, --interactive`: Interactively choose which prompt files to create (default in TTY).
+* `-p, --profile <mode>`: Memory protocol profile: `default` or `strict` (default: `default`).
+  * `default`: Concise guidance suitable for most teams
+  * `strict`: Additional governance rules for formal memory management (explicit confidence, source attribution, review enforcement, category constraints, provenance tracking)
 * `-j, --json`: Output structured JSON instead of plain text.
 
 If you already have prompt files in place, use `flash-mem update [path]` or the `inject-prompts` alias to refresh the embedded protocol block without touching the surrounding content.
@@ -31,6 +36,7 @@ flash-mem update [path] [options]
 ```
 
 **Options:**
+* `-p, --profile <mode>`: Memory protocol profile: `default` or `strict` (default: `default`). Use this to switch between profiles.
 * `-j, --json`: Output structured JSON instead of plain text.
 
 ---

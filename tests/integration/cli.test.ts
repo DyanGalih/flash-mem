@@ -623,4 +623,41 @@ describe('CLI Integration', () => {
       expect(err.stderr).toContain('Missing required fields: content');
     }
   });
+
+  it('should initialize with default profile when --profile is not specified', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+
+    const antigravityPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    const content = fs.readFileSync(antigravityPath, 'utf-8');
+
+    expect(content).toContain('## Memory Quality');
+    expect(content).not.toContain('## Strict Governance');
+  });
+
+  it('should initialize with strict profile when --profile strict is specified', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}" --profile strict`);
+
+    const antigravityPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    const content = fs.readFileSync(antigravityPath, 'utf-8');
+
+    expect(content).toContain('## Strict Governance');
+    expect(content).toContain('Require explicit confidence scores');
+    expect(content).toContain('Mandate source attribution');
+  });
+
+  it('should update to strict profile when flash-mem update --profile strict is run', async () => {
+    // Initialize with default profile
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+
+    const antigravityPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    let content = fs.readFileSync(antigravityPath, 'utf-8');
+    expect(content).not.toContain('## Strict Governance');
+
+    // Update to strict profile
+    await execAsync(`node ${cliScript} update "${testWorkspace}" --profile strict`);
+
+    content = fs.readFileSync(antigravityPath, 'utf-8');
+    expect(content).toContain('## Strict Governance');
+    expect(content).toContain('Track provenance');
+  });
 });

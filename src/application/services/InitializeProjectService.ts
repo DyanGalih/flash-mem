@@ -9,6 +9,8 @@ import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
 const PROTOCOL_START_MARKER_TEXT = '<!-- flash-mem-protocol-start';
 const PROTOCOL_END_MARKER_TEXT = '<!-- flash-mem-protocol-end -->';
 
+export type MemoryProtocolProfile = 'default' | 'strict';
+
 export type AgentInstructionTargetId = 'antigravity' | 'agents' | 'cursor' | 'cline' | 'copilot';
 
 export interface AgentInstructionTargetDefinition {
@@ -21,6 +23,7 @@ export interface AgentInstructionTargetDefinition {
 export interface WriteAgentInstructionsOptions {
   targetIds?: AgentInstructionTargetId[];
   existingOnly?: boolean;
+  profile?: MemoryProtocolProfile;
 }
 
 export interface WriteAgentInstructionsResult {
@@ -53,10 +56,10 @@ export const MCP_TARGETS: McpTargetDefinition[] = [
   { id: 'antigravity-cli', label: 'Antigravity CLI (Global)', filePath: '~/.gemini/config/mcp_config.json' }
 ];
 
-function buildAgentInstructionBlock(version: number): string {
+function buildAgentInstructionBlock(version: number, profile: MemoryProtocolProfile = 'default'): string {
   const startMarker = `${PROTOCOL_START_MARKER_TEXT} v${version} -->`;
 
-  return [
+  const baseContent = [
     startMarker,
     `# flash-mem`,
     ``,
@@ -67,9 +70,17 @@ function buildAgentInstructionBlock(version: number): string {
     `- Search first: read \`get_project_summary\` and \`search_memory\` before planning, drafting, or changing code.`,
     `- Prefer summaries, metadata, tags, confidence, and related files before loading full memory content.`,
     `- Store only durable knowledge: decisions, conventions, constraints, bugs, workflows.`,
+    `- Use \`update_memory\` when refining an existing memory; use \`add_memory\` for genuinely new durable facts.`,
+    `- Attach relationships when a memory depends on or explains another memory.`,
     `- Write immediately: use \`add_memory\` for new durable facts and \`update_memory\` for changes.`,
     `- Update summaries when architecture or shared conventions change.`,
     `- Prefer explicit deletion with audit trail.`,
+    ``,
+    `## Memory Quality`,
+    `- Capture validated outcomes and stable constraints, not transient status updates.`,
+    `- Include confidence-aware summaries; avoid low-confidence assertions unless clearly marked for verification.`,
+    `- Keep entries scoped and deduplicated: one durable concept per memory.`,
+    `- Never store secrets, credentials, tokens, or private keys in memory content.`,
     ``,
     `## Tools`,
     `- Read: \`get_project_summary\`, \`search_memory\`, \`get_relevant_context\``,
@@ -83,9 +94,36 @@ function buildAgentInstructionBlock(version: number): string {
     `4. Add or update durable memory.`,
     `5. Update summary when needed.`,
     ``,
+    `## Workflow By Intent`,
+    `- Planning: read summary, search relevant memories, then constrain plans to validated decisions and conventions.`,
+    `- Implementation: consult related memories first; record only validated architecture or behavior changes.`,
+    `- Incident/Fix: capture root cause, fix pattern, and prevention guidance as durable memory.`,
+    ``,
+    `## Do Not`,
+    `- Do not write duplicate synthesis snapshots as separate durable memories.`,
+    `- Do not dump broad low-confidence notes without verification markers.`,
+    `- Do not overwrite unrelated memory content when a targeted update is sufficient.`
+  ];
+
+  if (profile === 'strict') {
+    baseContent.push(
+      ``,
+      `## Strict Governance`,
+      `- Require explicit confidence scores for all memories; reject unscored entries.`,
+      `- Mandate source attribution; every memory must reference its origin (file path, URL, or meeting note).`,
+      `- Enforce review: flag memories without validation status or review timestamp.`,
+      `- Apply category constraints: reject memories that do not fit defined taxonomy.`,
+      `- Track provenance: maintain audit trail for memory updates and deletions.`
+    );
+  }
+
+  baseContent.push(
+    ``,
     `Use ` + '`flash-mem update`' + ` to refresh this block if it changes.`,
     PROTOCOL_END_MARKER_TEXT
-  ].join('\n');
+  );
+
+  return baseContent.join('\n');
 }
 
 export interface InitializationResult {
@@ -99,7 +137,7 @@ export class InitializeProjectService {
    * Initializes a flash-mem workspace directory structure, metadata, database, and ignores.
    * @param targetDirectory The directory to initialize (relative or absolute).
    */
-  public execute(targetDirectory: string, options: { promptTargetIds?: AgentInstructionTargetId[], mcpTargetIds?: McpTargetId[] } = {}): InitializationResult {
+  public execute(targetDirectory: string, options: { promptTargetIds?: AgentInstructionTargetId[], mcpTargetIds?: McpTargetId[], profile?: MemoryProtocolProfile } = {}): InitializationResult {
     const resolvedRoot = PathSanitizer.resolveRoot(targetDirectory);
 
     // Verify root folder exists
@@ -169,7 +207,7 @@ export class InitializeProjectService {
     }
 
     // 6. Automatically drop agent instruction files if they don't exist
-    this.writeAgentInstructions(resolvedRoot, { targetIds: options.promptTargetIds });
+    this.writeAgentInstructions(resolvedRoot, { targetIds: options.promptTargetIds, profile: options.profile });
     this.writeProjectMcpConfigs(resolvedRoot, { targetIds: options.mcpTargetIds });
 
     return {
@@ -181,7 +219,7 @@ export class InitializeProjectService {
 
   // Increment this version number whenever the agent instruction template changes.
   // Existing files with an older version marker will be automatically updated.
-  private static readonly PROTOCOL_VERSION = 4;
+  private static readonly PROTOCOL_VERSION = 5;
   private static readonly PROTOCOL_START_MARKER = PROTOCOL_START_MARKER_TEXT;
   private static readonly PROTOCOL_END_MARKER = PROTOCOL_END_MARKER_TEXT;
 
@@ -207,7 +245,8 @@ export class InitializeProjectService {
   ): WriteAgentInstructionsResult {
     const version = InitializeProjectService.PROTOCOL_VERSION;
     const endMarker = InitializeProjectService.PROTOCOL_END_MARKER;
-    const block = buildAgentInstructionBlock(version);
+    const profile = options.profile ?? 'default';
+    const block = buildAgentInstructionBlock(version, profile);
 
     const staleVersionPattern = new RegExp(
       `${InitializeProjectService.PROTOCOL_START_MARKER.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} v(\\d+) -->.*?${endMarker.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`,
@@ -242,7 +281,11 @@ export class InitializeProjectService {
         if (staleMatch) {
           // Replace stale versioned block with the current version
           const existingVersion = parseInt(staleMatch[1], 10);
-          if (existingVersion < version) {
+          const shouldUpdate =
+            existingVersion < version || // Version upgrade
+            (existingVersion === version && options.profile !== undefined); // Same version but explicit profile change
+
+          if (shouldUpdate) {
             const newContent = existingContent.replace(staleVersionPattern, block);
             fs.writeFileSync(filePath, newContent, 'utf-8');
             updated.push(filePath);

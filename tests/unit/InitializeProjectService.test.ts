@@ -119,7 +119,11 @@ describe('InitializeProjectService Unit', () => {
 
     expect(result.detected.map((target) => target.filePath)).toEqual(['ANTIGRAVITY.md']);
     expect(result.updated).toContain(targetPath);
-    expect(fs.readFileSync(targetPath, 'utf-8')).toContain('<!-- flash-mem-protocol-start v4 -->');
+    const updatedContent = fs.readFileSync(targetPath, 'utf-8');
+    expect(updatedContent).toContain('<!-- flash-mem-protocol-start v5 -->');
+    expect(updatedContent).toContain('## Memory Quality');
+    expect(updatedContent).toContain('## Workflow By Intent');
+    expect(updatedContent).toContain('## Do Not');
     expect(fs.readFileSync(targetPath, 'utf-8')).not.toContain('unversioned flash-mem block');
     expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
   });
@@ -143,5 +147,46 @@ describe('InitializeProjectService Unit', () => {
     expect(() => {
       service.execute(testWorkspace);
     }).toThrow('A regular file named ".flash-mem" already exists at the project root');
+  });
+
+  it('should use default profile when not specified', () => {
+    service.execute(testWorkspace);
+
+    const antigravityPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    const content = fs.readFileSync(antigravityPath, 'utf-8');
+
+    expect(content).toContain('## Memory Quality');
+    expect(content).toContain('## Workflow By Intent');
+    expect(content).not.toContain('## Strict Governance');
+  });
+
+  it('should inject strict governance guidance when strict profile is selected', () => {
+    service.execute(testWorkspace, { profile: 'strict' });
+
+    const antigravityPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    const content = fs.readFileSync(antigravityPath, 'utf-8');
+
+    expect(content).toContain('## Strict Governance');
+    expect(content).toContain('Require explicit confidence scores for all memories');
+    expect(content).toContain('Mandate source attribution');
+    expect(content).toContain('Enforce review');
+    expect(content).toContain('Apply category constraints');
+    expect(content).toContain('Track provenance');
+  });
+
+  it('should update existing files to strict profile when requested', () => {
+    // Initial init with default profile
+    service.execute(testWorkspace);
+
+    const antigravityPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    let content = fs.readFileSync(antigravityPath, 'utf-8');
+    expect(content).not.toContain('## Strict Governance');
+
+    // Update with strict profile
+    service.writeAgentInstructions(testWorkspace, { existingOnly: true, profile: 'strict' });
+
+    content = fs.readFileSync(antigravityPath, 'utf-8');
+    expect(content).toContain('## Strict Governance');
+    expect(content).toContain('Require explicit confidence scores');
   });
 });

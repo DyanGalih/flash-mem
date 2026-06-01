@@ -38,6 +38,49 @@ Recommended workflow:
 
 This works best when you want the agent to build context from day one.
 
+## Memory Protocol Profiles
+
+`flash-mem` supports two governance profiles for the injected memory protocol:
+
+### Default Profile
+
+The default profile provides concise, practical guidance suitable for most teams:
+
+```bash
+flash-mem init .
+# or explicitly
+flash-mem init . --profile default
+```
+
+This profile includes:
+- Search-first workflow guidance
+- Memory quality standards
+- Intent-driven workflow patterns
+- Anti-patterns to avoid
+
+### Strict Profile
+
+The strict profile adds additional governance rules for teams requiring formal memory management:
+
+```bash
+flash-mem init . --profile strict
+```
+
+Additional strict governance rules:
+- Require explicit confidence scores for all memories
+- Mandate source attribution for every memory entry
+- Enforce review status and timestamps
+- Apply category constraints to prevent taxonomy drift
+- Track full provenance trail for updates and deletions
+
+You can switch profiles at any time:
+
+```bash
+flash-mem update . --profile strict
+```
+
+This updates all existing agent instruction files to use the strict profile while preserving your memory data.
+
 ## Brownfield
 
 Brownfield means you are working in an existing codebase.

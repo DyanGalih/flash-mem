@@ -19,6 +19,24 @@ function objectType(db: Database.Database, objectName: string): 'table' | 'view'
   return null;
 }
 
+function runWithBusyRetry(operationName: string, work: () => void, maxAttempts = 3): void {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      work();
+      return;
+    } catch (error: any) {
+      if (error?.code !== 'SQLITE_BUSY') {
+        throw error;
+      }
+
+      if (attempt === maxAttempts) {
+        console.warn(`[flash-mem] ${operationName} skipped after ${maxAttempts} SQLITE_BUSY attempts.`);
+        return;
+      }
+    }
+  }
+}
+
 export function initializeMemoryStoreSchema(db: Database.Database): void {
   const migration = db.transaction(() => {
     db.prepare(`
@@ -219,9 +237,13 @@ export function initializeMemoryStoreSchema(db: Database.Database): void {
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_shared_lessons_language ON shared_lessons(language)`).run();
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_shared_lessons_topic ON shared_lessons(topic)`).run();
 
-    db.prepare(`DROP VIEW IF EXISTS memory_entries_view`).run();
+    const memoryEntriesViewType = objectType(db, 'memory_entries_view');
+    if (memoryEntriesViewType === 'table') {
+      db.prepare(`DROP TABLE memory_entries_view`).run();
+    }
+
     db.prepare(`
-      CREATE VIEW memory_entries_view AS
+      CREATE VIEW IF NOT EXISTS memory_entries_view AS
       SELECT me.*
       FROM memory_entries me
     `).run();
@@ -322,7 +344,7 @@ function rebuildMemoryEntriesFts(db: Database.Database): void {
 }
 
 function upsertSchemaMetadata(db: Database.Database, key: string, value: string): void {
-  try {
+  runWithBusyRetry(`schema metadata upsert for "${key}"`, () => {
     const timestamp = Date.now();
     const exists = db.prepare(`
       SELECT 1
@@ -343,12 +365,7 @@ function upsertSchemaMetadata(db: Database.Database, key: string, value: string)
       SET value = ?, updated_at = ?
       WHERE key = ?
     `).run(value, timestamp, key);
-  } catch (error: any) {
-    if (error?.code === 'SQLITE_BUSY') {
-      return;
-    }
-    throw error;
-  }
+  });
 }
 
 export function isMemoryStoreInitialized(db: Database.Database): boolean {

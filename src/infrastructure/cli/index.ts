@@ -456,10 +456,12 @@ program
   .argument('[path]', 'The project path to initialize', '.')
   .option('-a, --all', 'Skip interactive prompt and create instruction files for all supported agents')
   .option('-i, --interactive', 'Interactively choose which prompt files to create (default in TTY)')
+  .option('-p, --profile <mode>', 'Memory protocol profile: default or strict (default: default)', 'default')
   .option('-j, --json', 'Output structured JSON instead of plain text')
   .action(async (dirArg, options) => {
     const service = new InitializeProjectService();
     const useJson = !!options.json;
+    const profile = options.profile === 'strict' ? 'strict' : 'default';
 
     try {
       const targetDir = path.resolve(process.cwd(), dirArg);
@@ -474,7 +476,7 @@ program
         promptTargetIds = await promptForAgentInstructionTargets(targetDir);
         mcpTargetIds = await promptForMcpTargets(targetDir);
       }
-      const result = service.execute(targetDir, { promptTargetIds, mcpTargetIds });
+      const result = service.execute(targetDir, { promptTargetIds, mcpTargetIds, profile });
 
       if (useJson) {
         await writeStdout(JSON.stringify({
@@ -507,9 +509,11 @@ program
   .alias('inject-prompts')
   .description('Update existing Engineering Memory Protocol files in the current workspace and detect the active prompt surface')
   .argument('[path]', 'The project path to inject into', '.')
+  .option('-p, --profile <mode>', 'Memory protocol profile: default or strict (default: default)', 'default')
   .option('-j, --json', 'Output structured JSON instead of plain text')
   .action(async (dirArg, options) => {
     const useJson = !!options.json;
+    const profile = options.profile === 'strict' ? 'strict' : 'default';
 
     try {
       const targetDir = path.resolve(process.cwd(), dirArg);
@@ -520,7 +524,8 @@ program
 
       const service = new InitializeProjectService();
       const { updated, skipped, detected } = service.writeAgentInstructions(targetDir, {
-        existingOnly: true
+        existingOnly: true,
+        profile
       });
 
       if (useJson) {

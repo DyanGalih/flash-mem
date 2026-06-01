@@ -11,11 +11,17 @@ import { createMcpServer, startMcpServer } from '../../src/mcp/server';
 
 describe('MCP Server Foundation', () => {
   let db: any;
+  let previousGlobalDbPath: string | undefined;
   const testDbFile = path.resolve(__dirname, 'mcp-tools-workspace', 'flashmem.sqlite');
   const workspaceRoot = path.dirname(testDbFile);
 
   beforeEach(() => {
     fs.removeSync(path.dirname(testDbFile));
+    previousGlobalDbPath = process.env.FLASH_MEM_GLOBAL_DB_PATH;
+    process.env.FLASH_MEM_GLOBAL_DB_PATH = path.resolve(
+      path.dirname(testDbFile),
+      `.hub-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`
+    );
     db = createDatabaseConnection(testDbFile);
     new SchemaMigrationService(db).ensureCurrentSchema();
   });
@@ -23,6 +29,11 @@ describe('MCP Server Foundation', () => {
   afterEach(() => {
     if (db) {
       db.close();
+    }
+    if (previousGlobalDbPath === undefined) {
+      delete process.env.FLASH_MEM_GLOBAL_DB_PATH;
+    } else {
+      process.env.FLASH_MEM_GLOBAL_DB_PATH = previousGlobalDbPath;
     }
     fs.removeSync(path.dirname(testDbFile));
   });
