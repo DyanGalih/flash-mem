@@ -58,6 +58,8 @@ Important:
 - Launch the MCP server against that project root, not against your home directory, so memory stays workspace-scoped.
 - If you use Antigravity, keep one MCP server entry per project or use a workspace-local config. A single global Antigravity entry with a fixed `cwd` or workspace path will stay pinned to that project and will not automatically follow editor workspace switches.
 
+- After running `flash-mem init .` or changing the MCP configuration (for example via `flash-mem update`), reload your IDE so the MCP client picks up the new configuration. In VS Code / Antigravity this can be done by opening the command palette (Ctrl+P) and running "Reload Window", or by simply closing and re-opening the IDE.
+
 ## 📦 Installation
 
 ### Global Installation
