@@ -335,7 +335,7 @@ describe('CLI Integration', () => {
     fs.writeFileSync(path.join(featurePath, 'spec.md'), '# Feature A\n\nMemory-first planning.', 'utf-8');
 
     const { stdout, stderr } = await execAsync(
-      `node ${cliScript} prepare-context "${testWorkspace}" --feature "specs/feature-a" --json`
+      `node ${cliScript} prepare-context "${testWorkspace}" --feature "specs/feature-a" --write --json`
     );
 
     expect(stderr).toBe('');
@@ -346,6 +346,98 @@ describe('CLI Integration', () => {
     expect(result.memorySynthesis).toHaveProperty('markdown');
     expect(result.docSynthesis).toHaveProperty('markdown');
     expect(result.tokenReport).toHaveProperty('baselineTokens');
+    expect(result.indexedArtifacts).toBeTruthy();
+    expect(result.indexedArtifacts.entryCount).toBeGreaterThan(0);
+    expect(result.indexedArtifacts.sources).toContain('specs/feature-a/memory-synthesis.md');
+    expect(result.indexedArtifacts.sources).toContain('specs/feature-a/doc-synthesis.md');
+
+    const verifyDb = createDatabaseConnection(dbFile);
+    try {
+      new SchemaMigrationService(verifyDb).ensureCurrentSchema();
+      const project = new ProjectRepository(verifyDb).findByRootPath(testWorkspace);
+      expect(project).not.toBeNull();
+
+      const sourceRepo = new SourceDocumentRepository(verifyDb);
+      const memoryRepo = new MemoryEntryRepository(verifyDb);
+      const memorySource = sourceRepo.findByProjectAndPath(project!.id, 'specs/feature-a/memory-synthesis.md');
+      const docSource = sourceRepo.findByProjectAndPath(project!.id, 'specs/feature-a/doc-synthesis.md');
+      const storedEntries = memoryRepo.listByProject(project!.id);
+
+      expect(memorySource).not.toBeNull();
+      expect(docSource).not.toBeNull();
+      expect(storedEntries.some((entry) => entry.sourceDocumentId === memorySource?.id && entry.content.includes('# Memory Synthesis: feature-a'))).toBe(true);
+      expect(storedEntries.some((entry) => entry.sourceDocumentId === docSource?.id && entry.content.includes('# Doc Synthesis'))).toBe(true);
+    } finally {
+      verifyDb.close();
+    }
+  });
+
+  it('should store combined context directly in flash-mem when --store is used', async () => {
+    await execAsync(`node ${cliScript} init "${testWorkspace}"`);
+
+    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const db = createDatabaseConnection(dbFile);
+    try {
+      new SchemaMigrationService(db).ensureCurrentSchema();
+      const projectRepo = new ProjectRepository(db);
+      const project = projectRepo.upsertByRootPath(testWorkspace, 'test-workspace-cli');
+      new MemoryEntryService(
+        projectRepo,
+        new MemoryEntryRepository(db),
+        new TagRepository(db),
+        new RelationshipRepository(db),
+        new SourceDocumentRepository(db),
+        new SqliteTransactionRunner(db)
+      ).createMemoryEntry({
+        projectId: project.id,
+        title: 'Prepare context store decision',
+        content: 'Store synthesized context directly in flash-mem.',
+        category: 'decision',
+        source: 'docs/decision.md'
+      });
+    } finally {
+      db.close();
+    }
+
+    const featurePath = path.join(testWorkspace, 'specs', 'feature-b');
+    fs.ensureDirSync(featurePath);
+    fs.writeFileSync(path.join(featurePath, 'spec.md'), '# Feature B\n\nStore context directly.', 'utf-8');
+
+    const { stdout, stderr } = await execAsync(
+      `node ${cliScript} prepare-context "${testWorkspace}" --feature "specs/feature-b" --store --json`
+    );
+
+    expect(stderr).toBe('');
+    const result = JSON.parse(stdout.trim());
+    expect(result.success).toBe(true);
+    expect(result.memorySynthesisPath).toBeNull();
+    expect(result.docSynthesisPath).toBeNull();
+    expect(result.indexedArtifacts.sources).toEqual([
+      '.flash-mem/context/specs/feature-b/memory-synthesis.md',
+      '.flash-mem/context/specs/feature-b/doc-synthesis.md'
+    ]);
+    expect(fs.existsSync(path.join(testWorkspace, '.flash-mem', 'context', 'specs', 'feature-b', 'memory-synthesis.md'))).toBe(false);
+    expect(fs.existsSync(path.join(testWorkspace, '.flash-mem', 'context', 'specs', 'feature-b', 'doc-synthesis.md'))).toBe(false);
+
+    const verifyDb = createDatabaseConnection(dbFile);
+    try {
+      new SchemaMigrationService(verifyDb).ensureCurrentSchema();
+      const project = new ProjectRepository(verifyDb).findByRootPath(testWorkspace);
+      expect(project).not.toBeNull();
+
+      const sourceRepo = new SourceDocumentRepository(verifyDb);
+      const memoryRepo = new MemoryEntryRepository(verifyDb);
+      const memorySource = sourceRepo.findByProjectAndPath(project!.id, '.flash-mem/context/specs/feature-b/memory-synthesis.md');
+      const docSource = sourceRepo.findByProjectAndPath(project!.id, '.flash-mem/context/specs/feature-b/doc-synthesis.md');
+      const storedEntries = memoryRepo.listByProject(project!.id);
+
+      expect(memorySource).not.toBeNull();
+      expect(docSource).not.toBeNull();
+      expect(storedEntries.some((entry) => entry.sourceDocumentId === memorySource?.id && entry.content.includes('# Memory Synthesis: feature-b'))).toBe(true);
+      expect(storedEntries.some((entry) => entry.sourceDocumentId === docSource?.id && entry.content.includes('# Doc Synthesis'))).toBe(true);
+    } finally {
+      verifyDb.close();
+    }
   });
 
   it('should output error JSON on stdout if collision occurs with --json option', async () => {

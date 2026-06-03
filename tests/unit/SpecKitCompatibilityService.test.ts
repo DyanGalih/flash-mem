@@ -2,6 +2,8 @@ import * as fs from 'fs-extra';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DocSynthesisService } from '../../src/application/services/DocSynthesisService';
+import { IndexingService } from '../../src/application/services/IndexingService';
+import { MarkdownArtifactIngestionService } from '../../src/application/services/MarkdownArtifactIngestionService';
 import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { MemorySearchService } from '../../src/application/services/MemorySearchService';
 import { MemorySynthesisService } from '../../src/application/services/MemorySynthesisService';
@@ -11,6 +13,7 @@ import { SchemaMigrationService } from '../../src/application/services/SchemaMig
 import { SharedLessonService } from '../../src/application/services/SharedLessonService';
 import { SpecKitCompatibilityService } from '../../src/application/services/SpecKitCompatibilityService';
 import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
+import { IndexingRunRepository } from '../../src/infrastructure/database/repositories/IndexingRunRepository';
 import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
 import { ProjectSummaryRepository } from '../../src/infrastructure/database/repositories/ProjectSummaryRepository';
@@ -48,6 +51,7 @@ describe('SpecKitCompatibilityService', () => {
     const sourceDocumentRepo = new SourceDocumentRepository(db);
     const projectSummaryRepo = new ProjectSummaryRepository(db);
     const sharedLessonRepo = new SharedLessonRepository(db);
+    const indexingRunRepo = new IndexingRunRepository(db);
     const transactionRunner = new SqliteTransactionRunner(db);
 
     const entryService = new MemoryEntryService(
@@ -58,9 +62,18 @@ describe('SpecKitCompatibilityService', () => {
       sourceDocumentRepo,
       transactionRunner
     );
+    const indexingService = new IndexingService(
+      projectRepo,
+      sourceDocumentRepo,
+      indexingRunRepo,
+      entryService,
+      new SchemaMigrationService(db),
+      transactionRunner
+    );
     const searchService = new MemorySearchService(memoryEntryRepo, tagRepo, projectRepo);
     const summaryService = new ProjectSummaryService(project.id, projectRepo, projectSummaryRepo);
     const contextService = new RelevantContextService(projectRepo, searchService);
+    const artifactIngestionService = new MarkdownArtifactIngestionService(projectRepo, indexingService);
 
     summaryService.updateProjectSummary({
       projectName: 'speckit-compatibility-workspace',
@@ -97,7 +110,11 @@ describe('SpecKitCompatibilityService', () => {
     const service = new SpecKitCompatibilityService(
       new MemorySynthesisService(projectRepo, summaryService, contextService),
       new DocSynthesisService(),
-      new SharedLessonService(sharedLessonRepo)
+      new SharedLessonService(sharedLessonRepo),
+      undefined,
+      undefined,
+      undefined,
+      artifactIngestionService
     );
 
     const result = service.prepareContext({
@@ -116,6 +133,106 @@ describe('SpecKitCompatibilityService', () => {
     expect(result.docSynthesisPath).toBeTruthy();
     expect(fs.existsSync(result.memorySynthesisPath as string)).toBe(true);
     expect(fs.existsSync(result.docSynthesisPath as string)).toBe(true);
+    expect(result.indexedArtifacts).not.toBeNull();
+    expect(result.indexedArtifacts?.entryCount).toBeGreaterThan(0);
+
+    const memorySynthesisSource = sourceDocumentRepo.findByProjectAndPath(
+      project.id,
+      path.join('specs', 'feature-a', 'memory-synthesis.md').replace(/\\/g, '/')
+    );
+    const docSynthesisSource = sourceDocumentRepo.findByProjectAndPath(
+      project.id,
+      path.join('specs', 'feature-a', 'doc-synthesis.md').replace(/\\/g, '/')
+    );
+    const storedEntries = memoryEntryRepo.listByProject(project.id);
+
+    expect(memorySynthesisSource).not.toBeNull();
+    expect(docSynthesisSource).not.toBeNull();
+    expect(storedEntries.some((entry) => entry.sourceDocumentId === memorySynthesisSource?.id && entry.content.includes('# Memory Synthesis: memory-first'))).toBe(true);
+    expect(storedEntries.some((entry) => entry.sourceDocumentId === docSynthesisSource?.id && entry.content.includes('# Doc Synthesis'))).toBe(true);
+  });
+
+  it('stores synthesized context directly in flash-mem when requested', () => {
+    const projectRepo = new ProjectRepository(db);
+    const project = projectRepo.upsertByRootPath(workspaceRoot, 'speckit-compatibility-workspace');
+    const memoryEntryRepo = new MemoryEntryRepository(db);
+    const tagRepo = new TagRepository(db);
+    const relationshipRepo = new RelationshipRepository(db);
+    const sourceDocumentRepo = new SourceDocumentRepository(db);
+    const projectSummaryRepo = new ProjectSummaryRepository(db);
+    const sharedLessonRepo = new SharedLessonRepository(db);
+    const indexingRunRepo = new IndexingRunRepository(db);
+    const transactionRunner = new SqliteTransactionRunner(db);
+
+    const entryService = new MemoryEntryService(
+      projectRepo,
+      memoryEntryRepo,
+      tagRepo,
+      relationshipRepo,
+      sourceDocumentRepo,
+      transactionRunner
+    );
+    const indexingService = new IndexingService(
+      projectRepo,
+      sourceDocumentRepo,
+      indexingRunRepo,
+      entryService,
+      new SchemaMigrationService(db),
+      transactionRunner
+    );
+    const searchService = new MemorySearchService(memoryEntryRepo, tagRepo, projectRepo);
+    const summaryService = new ProjectSummaryService(project.id, projectRepo, projectSummaryRepo);
+    const contextService = new RelevantContextService(projectRepo, searchService);
+    const artifactIngestionService = new MarkdownArtifactIngestionService(projectRepo, indexingService);
+
+    summaryService.updateProjectSummary({
+      projectName: 'speckit-compatibility-workspace',
+      purpose: 'Local-first memory synthesis for SDD',
+      techStack: 'TypeScript, SQLite, MCP',
+      architectureStyle: 'Layered local-first architecture',
+      importantConventions: 'Read memory before implementation',
+      knownConstraints: 'No network egress',
+      securitySensitiveAreas: 'Path handling and secret redaction'
+    });
+
+    fs.ensureDirSync(path.join(workspaceRoot, 'specs', 'feature-a'));
+    fs.writeFileSync(
+      path.join(workspaceRoot, 'specs', 'feature-a', 'spec.md'),
+      '# Feature A\n\nBe memory-first before planning.',
+      'utf-8'
+    );
+
+    const service = new SpecKitCompatibilityService(
+      new MemorySynthesisService(projectRepo, summaryService, contextService),
+      new DocSynthesisService(),
+      new SharedLessonService(sharedLessonRepo),
+      undefined,
+      undefined,
+      undefined,
+      artifactIngestionService
+    );
+
+    const result = service.prepareContext({
+      workspaceRoot,
+      featurePath: 'specs/feature-a',
+      query: 'memory-first',
+      storeArtifacts: true
+    });
+
+    expect(result.memorySynthesisPath).toBeNull();
+    expect(result.docSynthesisPath).toBeNull();
+    expect(result.indexedArtifacts).not.toBeNull();
+    expect(result.indexedArtifacts?.sources).toEqual([
+      '.flash-mem/context/specs/feature-a/memory-synthesis.md',
+      '.flash-mem/context/specs/feature-a/doc-synthesis.md'
+    ]);
+    expect(fs.existsSync(path.join(workspaceRoot, '.flash-mem', 'context', 'specs', 'feature-a', 'memory-synthesis.md'))).toBe(false);
+    expect(fs.existsSync(path.join(workspaceRoot, '.flash-mem', 'context', 'specs', 'feature-a', 'doc-synthesis.md'))).toBe(false);
+
+    const memorySource = sourceDocumentRepo.findByProjectAndPath(project.id, '.flash-mem/context/specs/feature-a/memory-synthesis.md');
+    const docSource = sourceDocumentRepo.findByProjectAndPath(project.id, '.flash-mem/context/specs/feature-a/doc-synthesis.md');
+    expect(memorySource).not.toBeNull();
+    expect(docSource).not.toBeNull();
   });
 
   it('promotes and syncs shared lessons into a review file', async () => {

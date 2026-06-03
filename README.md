@@ -39,6 +39,8 @@ For setup, workflow, and migration details, see the linked docs.
 
 For a reusable review prompt to check whether flash-mem was used in a task, see [flash-mem Review Prompt](docs/flash-mem-review-prompt.md).
 
+For lightweight release notes, see [Release Notes](docs/releases.md).
+
 ## 🚀 Quick Start
 
 1. Initialize the workspace:

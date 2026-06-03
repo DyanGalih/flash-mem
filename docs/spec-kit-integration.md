@@ -9,7 +9,7 @@ These remain the primary `flash-mem` workflow:
 
 - Retrieval: `get_project_summary`, `search_memory`, `get_relevant_context`
 - Writes: `add_memory`, `update_memory`, `delete_memory`
-- Capture and maintenance: `capture_artifact_memory`, `export_markdown`, `rebuild_index`
+- Capture and maintenance: `capture_artifact_memory`, `export_markdown`
 
 These names are still the source of truth for flash-mem-native usage. All compatibility helpers are additive and should delegate to these services rather than replacing them.
 
@@ -65,6 +65,11 @@ Migration-only wrappers are kept for downstream prompt compatibility and can be 
 - `speckit_memory_sync_shared` writes both the native root file and the review buffer at `docs/memory/SHARED_LESSONS.md`.
 - `speckit_memory_init_project` accepts the memory-hub schema `{ language, framework?, workspaceRoot?, projectRoot? }`, writes the standard flash-mem init artifacts, and also emits the reference memory-hub profile at `.specify/extensions/memory-md/config.yml` with `project_profile.shared_memory.enabled` and `project_profile.shared_memory.sync_channels`.
 - `speckit_memory_token_report` normalizes memory-hub argument names and returns the compatibility report payload.
+- `prepare-context`, `synthesize-memory`, and `synthesize-docs` can write markdown artifacts, and when `--write` is enabled those artifacts are automatically indexed back into flash-mem as durable markdown content.
+- `--store` is the no-file mode. It stores the generated markdown directly in flash-mem and skips creating markdown files on disk.
+- Use `capture_artifact_memory` after markdown artifacts are created or updated. If flash-mem retrieval is empty or incomplete, inspect the markdown file and do not skip `capture_artifact_memory`; if it contains durable knowledge, capture it before treating it as current context.
+- If capture still returns nothing useful, keep the markdown file as the backup artifact.
+- Prefer `capture_artifact_memory` for markdown file changes and new markdown artifacts when the file contains durable knowledge, and never skip capture just because the file already exists.
 
 Shared lessons are written to two locations:
 

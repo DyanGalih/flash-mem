@@ -120,9 +120,14 @@ describe('InitializeProjectService Unit', () => {
     expect(result.detected.map((target) => target.filePath)).toEqual(['ANTIGRAVITY.md']);
     expect(result.updated).toContain(targetPath);
     const updatedContent = fs.readFileSync(targetPath, 'utf-8');
-    expect(updatedContent).toContain('<!-- flash-mem-protocol-start v5 -->');
+    expect(updatedContent).toContain('<!-- flash-mem-protocol-start v8 -->');
+    expect(updatedContent).toContain('Treat flash-mem as the source of truth for durable project memory.');
+    expect(updatedContent).toContain('If flash-mem retrieval is empty or incomplete, inspect the markdown file and do not skip `capture_artifact_memory`; if it contains durable knowledge, capture it before treating it as current context.');
+    expect(updatedContent).toContain('If `capture_artifact_memory` still returns nothing useful, keep the markdown file as the backup artifact.');
+    expect(updatedContent).toContain('never skip capture just because the file already exists');
     expect(updatedContent).toContain('## Memory Quality');
     expect(updatedContent).toContain('## Workflow By Intent');
+    expect(updatedContent).toContain('## Maintenance');
     expect(updatedContent).toContain('## Do Not');
     expect(fs.readFileSync(targetPath, 'utf-8')).not.toContain('unversioned flash-mem block');
     expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
@@ -155,6 +160,10 @@ describe('InitializeProjectService Unit', () => {
     const antigravityPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
     const content = fs.readFileSync(antigravityPath, 'utf-8');
 
+    expect(content).toContain('Treat flash-mem as the source of truth for durable project memory.');
+    expect(content).toContain('If flash-mem retrieval is empty or incomplete, inspect the markdown file and do not skip `capture_artifact_memory`; if it contains durable knowledge, capture it before treating it as current context.');
+    expect(content).toContain('keep the markdown file as the backup artifact');
+    expect(content).toContain('never skip capture just because the file already exists');
     expect(content).toContain('## Memory Quality');
     expect(content).toContain('## Workflow By Intent');
     expect(content).not.toContain('## Strict Governance');

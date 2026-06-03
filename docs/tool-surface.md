@@ -6,7 +6,7 @@
 
 - Retrieval: `get_project_summary`, `search_memory`, `get_relevant_context`
 - Writes: `add_memory`, `update_memory`, `delete_memory`
-- Capture and maintenance: `capture_artifact_memory`, `export_markdown`, `rebuild_index`
+- Capture and maintenance: `capture_artifact_memory`, `export_markdown`
 
 ## Advanced / Admin
 
@@ -69,5 +69,6 @@ Shared lessons are written to both `SHARED_LESSONS.md` at the workspace root and
 ## Notes
 
 - `memory_index` is retained as a lower-level incremental ingestion tool.
-- `rebuild_index` is the command to use for a full workspace rescan, but the current implementation scans markdown files only.
+- `capture_artifact_memory` is the preferred refresh path for markdown artifacts.
+- `rebuild_index` is reserved for rare full workspace rescans and still scans markdown files only.
 - `update_project_summary` is available when the MCP server is started with project summary write access enabled.

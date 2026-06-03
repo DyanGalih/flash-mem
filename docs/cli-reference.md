@@ -93,6 +93,7 @@ Memory entry added successfully! ID: 1
 ### 3. Rebuild Index
 
 Perform a complete transactional rebuild of the workspace memory index from markdown files.
+This is a fallback path; prefer `capture_artifact_memory` after markdown changes.
 
 ```bash
 flash-mem rebuild-index [path] [options]
@@ -144,6 +145,8 @@ flash-mem prepare-context [path] [options]
 * `--query <string>`: Override the synthesis query.
 * `--token-budget <number>`: Token budget for the memory synthesis output.
 * `--write`: Write `memory-synthesis.md` and `doc-synthesis.md` into the feature folder.
+  * When `--write` is set, the generated markdown artifacts are also indexed back into flash-mem as durable markdown content.
+* `--store`: Store the generated markdown directly in flash-mem without creating files.
 * `-j, --json`: Output structured JSON.
 
 ---
@@ -161,7 +164,9 @@ flash-mem sync-shared [path] [options]
 ```
 
 **Notes:**
-* `synthesize-memory` and `synthesize-docs` can write standalone artifacts with `--write`.
+ * `synthesize-memory` and `synthesize-docs` can write standalone artifacts with `--write`.
+ * When `--write` is used, the generated markdown file is also indexed back into flash-mem as durable content.
+ * `--store` skips filesystem writes and stores the generated markdown directly in flash-mem.
 * `token-report` shows a compact baseline/cached/saved token comparison.
 * `promote-lesson` stores an approved lesson in shared memory.
 * `sync-shared` writes the native `SHARED_LESSONS.md` file and a temporary review buffer at `docs/memory/SHARED_LESSONS.md`.

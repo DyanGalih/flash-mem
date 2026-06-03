@@ -5,6 +5,7 @@ import { MemorySynthesisService } from './MemorySynthesisService';
 import { DocSynthesisService } from './DocSynthesisService';
 import { SharedLessonService, SharedLessonSyncResult } from './SharedLessonService';
 import { TokenBudgetService } from './TokenBudgetService';
+import { MarkdownArtifactIngestionResult, MarkdownArtifactIngestionService } from './MarkdownArtifactIngestionService';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
 import { ProjectProfileRepository } from '../../infrastructure/database/repositories/ProjectProfileRepository';
 import { ProjectProfile } from '../../domain/entities/ProjectProfile';
@@ -28,6 +29,7 @@ export interface PrepareContextResult {
   tokenReport: TokenReport;
   memorySynthesisPath: string | null;
   docSynthesisPath: string | null;
+  indexedArtifacts: MarkdownArtifactIngestionResult | null;
 }
 
 export interface SharedLessonCompatibilityInput {
@@ -73,7 +75,8 @@ export class SpecKitCompatibilityService {
     private readonly sharedLessonService: SharedLessonService,
     private readonly tokenBudgetService: TokenBudgetService = new TokenBudgetService(),
     private readonly initializeProjectService: InitializeProjectService = new InitializeProjectService(),
-    private readonly projectProfileRepositoryFactory: (workspaceRoot: string) => ProjectProfileRepository = (workspaceRoot) => new ProjectProfileRepository(workspaceRoot)
+    private readonly projectProfileRepositoryFactory: (workspaceRoot: string) => ProjectProfileRepository = (workspaceRoot) => new ProjectProfileRepository(workspaceRoot),
+    private readonly markdownArtifactIngestionService?: MarkdownArtifactIngestionService
   ) {}
 
   public prepareContext(input: {
@@ -82,6 +85,7 @@ export class SpecKitCompatibilityService {
     query?: string;
     tokenBudget?: number;
     writeArtifacts?: boolean;
+    storeArtifacts?: boolean;
   }): PrepareContextResult {
     const workspaceRoot = PathSanitizer.resolveRoot(input.workspaceRoot);
     const featurePath = input.featurePath
@@ -107,6 +111,11 @@ export class SpecKitCompatibilityService {
 
     let memorySynthesisPath: string | null = null;
     let docSynthesisPath: string | null = null;
+    let indexedArtifacts: MarkdownArtifactIngestionResult | null = null;
+
+    if (input.writeArtifacts && input.storeArtifacts) {
+      throw new Error('Use either writeArtifacts or storeArtifacts, not both.');
+    }
 
     if (input.writeArtifacts) {
       memorySynthesisPath = PathSanitizer.sanitizeSubPath(featurePath, 'memory-synthesis.md');
@@ -114,6 +123,18 @@ export class SpecKitCompatibilityService {
       fs.ensureDirSync(featurePath);
       fs.writeFileSync(memorySynthesisPath, memorySynthesis.markdown, 'utf-8');
       fs.writeFileSync(docSynthesisPath, docSynthesis.markdown, 'utf-8');
+      indexedArtifacts = this.markdownArtifactIngestionService?.ingestMarkdownArtifacts(workspaceRoot, [
+        { artifactPath: memorySynthesisPath, content: memorySynthesis.markdown, source: 'file' },
+        { artifactPath: docSynthesisPath, content: docSynthesis.markdown, source: 'file' }
+      ]) ?? null;
+    } else if (input.storeArtifacts) {
+      const featureKey = this.toFeatureKey(workspaceRoot, featurePath);
+      const memoryArtifactPath = PathSanitizer.sanitizeSubPath(workspaceRoot, path.join('.flash-mem', 'context', featureKey, 'memory-synthesis.md'));
+      const docArtifactPath = PathSanitizer.sanitizeSubPath(workspaceRoot, path.join('.flash-mem', 'context', featureKey, 'doc-synthesis.md'));
+      indexedArtifacts = this.markdownArtifactIngestionService?.ingestMarkdownArtifacts(workspaceRoot, [
+        { artifactPath: memoryArtifactPath, content: memorySynthesis.markdown, source: 'synthesis' },
+        { artifactPath: docArtifactPath, content: docSynthesis.markdown, source: 'synthesis' }
+      ]) ?? null;
     }
 
     return {
@@ -124,8 +145,14 @@ export class SpecKitCompatibilityService {
       docSynthesis,
       tokenReport,
       memorySynthesisPath,
-      docSynthesisPath
+      docSynthesisPath,
+      indexedArtifacts
     };
+  }
+
+  private toFeatureKey(workspaceRoot: string, featurePath: string): string {
+    const relative = path.relative(workspaceRoot, featurePath).split(path.sep).join('/');
+    return relative.length > 0 ? relative : 'root';
   }
 
   public buildTokenReport(input: {

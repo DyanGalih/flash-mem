@@ -6,6 +6,7 @@ import { ArtifactMemoryCaptureService } from '../application/services/ArtifactMe
 import { BackgroundMarkdownExportScheduler, resolveBackgroundMarkdownExportDelayMs } from '../application/services/BackgroundMarkdownExportScheduler';
 import { DocSynthesisService } from '../application/services/DocSynthesisService';
 import { IndexingService } from '../application/services/IndexingService';
+import { MarkdownArtifactIngestionService } from '../application/services/MarkdownArtifactIngestionService';
 import { MarkdownExportService } from '../application/services/MarkdownExportService';
 import { MarkdownRestoreService } from '../application/services/MarkdownRestoreService';
 import { MemoryEntryService } from '../application/services/MemoryEntryService';
@@ -136,6 +137,7 @@ export function createMcpServer(context: McpServerContext) {
     schemaMigrationService,
     transactionRunner
   );
+  const markdownArtifactIngestionService = new MarkdownArtifactIngestionService(projectRepository, indexingService);
   const markdownExportService = new MarkdownExportService(
     projectRepository,
     projectSummaryRepository,
@@ -178,7 +180,10 @@ export function createMcpServer(context: McpServerContext) {
     memorySynthesisService,
     docSynthesisService,
     sharedLessonService,
-    new TokenBudgetService()
+    new TokenBudgetService(),
+    undefined,
+    undefined,
+    markdownArtifactIngestionService
   );
   const workspaceIndexingService = new WorkspaceIndexingService(
     indexingService,

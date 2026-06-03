@@ -11,7 +11,8 @@ export const prepareContextInputSchema = z.object({
   featurePath: z.string().min(1).optional(),
   query: z.string().min(1).optional(),
   tokenBudget: z.number().int().positive().optional(),
-  writeArtifacts: z.boolean().optional()
+  writeArtifacts: z.boolean().optional(),
+  storeArtifacts: z.boolean().optional()
 });
 
 export const memorySynthesisInputSchema = z.object({
@@ -181,7 +182,8 @@ export function createPrepareContextTool(service: SpecKitCompatibilityService, d
         featurePath: input.featurePath,
         query: input.query,
         tokenBudget: input.tokenBudget,
-        writeArtifacts: input.writeArtifacts
+        writeArtifacts: input.writeArtifacts,
+        storeArtifacts: input.storeArtifacts
       })
   };
 }

@@ -88,15 +88,19 @@ Brownfield means you are working in an existing codebase.
 Recommended workflow:
 
 1. Initialize the workspace with `flash-mem init .`
-2. Run `flash-mem rebuild-index . --yes` to refresh markdown-backed memory
+2. Capture changed markdown artifacts with `flash-mem capture_artifact_memory` so flash-mem stays current
 3. Add or update durable memory for architecture decisions, conventions, bug patterns, and key constraints
 4. Refresh the project summary when the architecture changes
 5. Search memory before making changes so the agent does not repeat old mistakes
 
 Important:
 
-- The current `rebuild-index` command scans markdown files (`.md`, `.markdown`) rather than every source file in the repository.
-- For code-heavy projects, pair it with targeted memory writes or MCP source indexing for the files you want the agent to remember.
+- The current `capture_artifact_memory` command is best for markdown artifacts that changed recently.
+- If flash-mem retrieval is empty or incomplete, inspect the markdown file and do not skip `capture_artifact_memory`; if it contains durable knowledge, capture it before treating it as current context.
+- If capture still returns nothing useful, keep the markdown file itself as the backup artifact.
+- Prefer `capture_artifact_memory` for markdown file changes and new markdown artifacts when the file contains durable knowledge, and never skip capture just because the file already exists.
+- Use `rebuild-index` only when you need a rare full markdown rescan.
+- For code-heavy projects, pair artifact capture with targeted memory writes or MCP source indexing for the files you want the agent to remember.
 
 ## Spec-Driven Development
 

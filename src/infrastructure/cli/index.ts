@@ -6,6 +6,7 @@ import * as readline from 'readline';
 import { BackgroundMarkdownExportScheduler, resolveBackgroundMarkdownExportDelayMs } from '../../application/services/BackgroundMarkdownExportScheduler';
 import { DocSynthesisService } from '../../application/services/DocSynthesisService';
 import { IndexingService } from '../../application/services/IndexingService';
+import { MarkdownArtifactIngestionService } from '../../application/services/MarkdownArtifactIngestionService';
 import {
   AGENT_INSTRUCTION_TARGETS,
   AgentInstructionTargetId,
@@ -117,6 +118,8 @@ interface WorkspaceCompatibilityBundle {
   db: ReturnType<typeof createDatabaseConnection>;
   project: ReturnType<ProjectRepository['upsertByRootPath']>;
   compatibilityService: SpecKitCompatibilityService;
+  indexingService: IndexingService;
+  markdownArtifactIngestionService: MarkdownArtifactIngestionService;
   memorySynthesisService: MemorySynthesisService;
   docSynthesisService: DocSynthesisService;
   sharedLessonService: SharedLessonService;
@@ -144,6 +147,38 @@ function formatTokenReport(report: {
   ].join('\n') + '\n';
 }
 
+function writeAndIndexMarkdownArtifact(
+  bundle: WorkspaceCompatibilityBundle,
+  workspaceRoot: string,
+  artifactPath: string,
+  content: string
+): ReturnType<MarkdownArtifactIngestionService['ingestMarkdownArtifacts']> {
+  fs.ensureDirSync(path.dirname(artifactPath));
+  fs.writeFileSync(artifactPath, content, 'utf-8');
+  return bundle.markdownArtifactIngestionService.ingestMarkdownArtifacts(workspaceRoot, [
+    { artifactPath, content, source: 'file' }
+  ]);
+}
+
+function storeMarkdownArtifact(
+  bundle: WorkspaceCompatibilityBundle,
+  workspaceRoot: string,
+  artifactPath: string,
+  content: string
+): ReturnType<MarkdownArtifactIngestionService['ingestMarkdownArtifacts']> {
+  return bundle.markdownArtifactIngestionService.ingestMarkdownArtifacts(workspaceRoot, [
+    { artifactPath, content, source: 'synthesis' }
+  ]);
+}
+
+function buildStoredArtifactPath(workspaceRoot: string, featurePath: string | undefined, fileName: string): string {
+  const resolvedFeaturePath = featurePath
+    ? PathSanitizer.sanitizeSubPath(workspaceRoot, featurePath)
+    : workspaceRoot;
+  const featureKey = path.relative(workspaceRoot, resolvedFeaturePath).split(path.sep).join('/') || 'root';
+  return PathSanitizer.sanitizeSubPath(workspaceRoot, path.join('.flash-mem', 'context', featureKey, fileName));
+}
+
 function normalizePathArg(target: string | undefined, fallback = '.'): string {
   return path.resolve(process.cwd(), target ?? fallback);
 }
@@ -155,7 +190,8 @@ function createWorkspaceCompatibilityBundle(workspaceRoot: string): WorkspaceCom
   }
 
   const db = createDatabaseConnection(dbFile);
-  new SchemaMigrationService(db).ensureCurrentSchema();
+  const schemaMigrationService = new SchemaMigrationService(db);
+  schemaMigrationService.ensureCurrentSchema();
 
   const projectRepo = new ProjectRepository(db);
   const project = projectRepo.upsertByRootPath(workspaceRoot, path.basename(workspaceRoot));
@@ -164,8 +200,25 @@ function createWorkspaceCompatibilityBundle(workspaceRoot: string): WorkspaceCom
   const relationshipRepository = new RelationshipRepository(db);
   const sourceDocumentRepository = new SourceDocumentRepository(db);
   const projectSummaryRepository = new ProjectSummaryRepository(db);
+  const indexingRunRepository = new IndexingRunRepository(db);
   const sharedLessonRepository = new SharedLessonRepository(db);
   const transactionRunner = new SqliteTransactionRunner(db);
+  const memoryEntryService = new MemoryEntryService(
+    projectRepo,
+    memoryEntryRepository,
+    tagRepository,
+    relationshipRepository,
+    sourceDocumentRepository,
+    transactionRunner
+  );
+  const indexingService = new IndexingService(
+    projectRepo,
+    sourceDocumentRepository,
+    indexingRunRepository,
+    memoryEntryService,
+    schemaMigrationService,
+    transactionRunner
+  );
   const memorySearchService = new MemorySearchService(memoryEntryRepository, tagRepository, projectRepo);
   const projectSummaryService = new ProjectSummaryService(project.id, projectRepo, projectSummaryRepository);
   const relevantContextService = new RelevantContextService(projectRepo, memorySearchService);
@@ -176,22 +229,27 @@ function createWorkspaceCompatibilityBundle(workspaceRoot: string): WorkspaceCom
   const globalSharedLessonRepository = new SharedLessonRepository(globalDb);
 
   const sharedLessonService = new SharedLessonService(sharedLessonRepository, globalSharedLessonRepository);
+  const markdownArtifactIngestionService = new MarkdownArtifactIngestionService(projectRepo, indexingService);
   const compatibilityService = new SpecKitCompatibilityService(
     memorySynthesisService,
     docSynthesisService,
     sharedLessonService,
-    new TokenBudgetService()
+    new TokenBudgetService(),
+    undefined,
+    undefined,
+    markdownArtifactIngestionService
   );
 
   // Keep the original write-capable services available for future command extensions.
   void relationshipRepository;
-  void sourceDocumentRepository;
-  void transactionRunner;
+  void memoryEntryService;
 
   return {
     db,
     project,
     compatibilityService,
+    indexingService,
+    markdownArtifactIngestionService,
     memorySynthesisService,
     docSynthesisService,
     sharedLessonService,
@@ -1264,12 +1322,16 @@ program
   .option('--query <query>', 'Override the memory synthesis query')
   .option('--token-budget <number>', 'Token budget for the memory synthesis output', (val) => parseInt(val, 10))
   .option('--write', 'Write memory-synthesis.md and doc-synthesis.md to the feature path')
+  .option('--store', 'Store synthesized markdown directly in flash-mem without writing files')
   .option('-j, --json', 'Output structured JSON instead of plain text')
   .action(async (workspaceArg, options) => {
     const useJson = !!options.json;
     let bundle: WorkspaceCompatibilityBundle | null = null;
 
     try {
+      if (options.write && options.store) {
+        throw new Error('Use either --write or --store, not both.');
+      }
       const workspaceRoot = normalizePathArg(workspaceArg);
       bundle = createWorkspaceCompatibilityBundle(workspaceRoot);
       const result = bundle.compatibilityService.prepareContext({
@@ -1277,7 +1339,8 @@ program
         featurePath: options.feature,
         query: options.query,
         tokenBudget: options.tokenBudget,
-        writeArtifacts: !!options.write
+        writeArtifacts: !!options.write,
+        storeArtifacts: !!options.store
       });
 
       if (useJson) {
@@ -1290,7 +1353,8 @@ program
           docSynthesis: result.docSynthesis,
           tokenReport: result.tokenReport,
           memorySynthesisPath: result.memorySynthesisPath,
-          docSynthesisPath: result.docSynthesisPath
+          docSynthesisPath: result.docSynthesisPath,
+          indexedArtifacts: result.indexedArtifacts
         }));
       } else {
         await writeStdout(result.memorySynthesis.markdown);
@@ -1302,6 +1366,13 @@ program
             result.memorySynthesisPath ? `- ${path.relative(workspaceRoot, result.memorySynthesisPath)}` : null,
             result.docSynthesisPath ? `- ${path.relative(workspaceRoot, result.docSynthesisPath)}` : null
           ].filter(Boolean).join('\n') + '\n');
+        }
+        if (result.indexedArtifacts) {
+          await writeStdout([
+            'Artifacts indexed into memory:',
+            ...result.indexedArtifacts.sources.map((source) => `- ${source}`),
+            `- Entries stored: ${result.indexedArtifacts.entryCount}`
+          ].join('\n') + '\n');
         }
       }
 
@@ -1328,12 +1399,16 @@ program
   .option('--query <query>', 'Override the memory synthesis query')
   .option('--token-budget <number>', 'Token budget for the synthesis output', (val) => parseInt(val, 10))
   .option('--write', 'Write memory-synthesis.md to the feature path')
+  .option('--store', 'Store the synthesized markdown directly in flash-mem without writing files')
   .option('-j, --json', 'Output structured JSON instead of plain text')
   .action(async (workspaceArg, options) => {
     const useJson = !!options.json;
     let bundle: WorkspaceCompatibilityBundle | null = null;
 
     try {
+      if (options.write && options.store) {
+        throw new Error('Use either --write or --store, not both.');
+      }
       const workspaceRoot = normalizePathArg(workspaceArg);
       bundle = createWorkspaceCompatibilityBundle(workspaceRoot);
       const result = bundle.memorySynthesisService.buildFeatureSynthesis({
@@ -1347,10 +1422,16 @@ program
         ? PathSanitizer.sanitizeSubPath(options.feature ? PathSanitizer.sanitizeSubPath(workspaceRoot, options.feature) : workspaceRoot, 'memory-synthesis.md')
         : null;
 
-      if (artifactPath) {
-        fs.ensureDirSync(path.dirname(artifactPath));
-        fs.writeFileSync(artifactPath, result.markdown, 'utf-8');
-      }
+      const indexedArtifacts = options.write && artifactPath
+        ? writeAndIndexMarkdownArtifact(bundle, workspaceRoot, artifactPath, result.markdown)
+        : options.store
+          ? storeMarkdownArtifact(
+            bundle,
+            workspaceRoot,
+            buildStoredArtifactPath(workspaceRoot, options.feature, 'memory-synthesis.md'),
+            result.markdown
+          )
+          : null;
 
       if (useJson) {
         await writeStdout(formatJsonOutput({
@@ -1358,13 +1439,19 @@ program
           workspaceRoot,
           query: options.query ?? options.feature ?? path.basename(workspaceRoot),
           synthesis: result,
-          artifactPath
+          artifactPath,
+          indexedArtifacts
         }));
       } else {
         await writeStdout(result.markdown);
         await writeStdout(`Estimated tokens: ${result.tokenEstimate}\n`);
-        if (artifactPath) {
+        if (options.write && artifactPath) {
           await writeStdout(`Artifact written: ${path.relative(workspaceRoot, artifactPath)}\n`);
+        }
+        if (options.store && indexedArtifacts) {
+          await writeStdout(`Artifact stored in flash-mem: ${indexedArtifacts.sources.join(', ')}\n`);
+        } else if (artifactPath && indexedArtifacts) {
+          await writeStdout(`Artifact indexed into memory: ${indexedArtifacts.sources.join(', ')}\n`);
         }
       }
 
@@ -1389,12 +1476,16 @@ program
   .argument('[path]', 'The workspace path to read from', '.')
   .option('--feature <path>', 'Feature path relative to the workspace root')
   .option('--write', 'Write doc-synthesis.md to the feature path')
+  .option('--store', 'Store the synthesized markdown directly in flash-mem without writing files')
   .option('-j, --json', 'Output structured JSON instead of plain text')
   .action(async (workspaceArg, options) => {
     const useJson = !!options.json;
     let bundle: WorkspaceCompatibilityBundle | null = null;
 
     try {
+      if (options.write && options.store) {
+        throw new Error('Use either --write or --store, not both.');
+      }
       const workspaceRoot = normalizePathArg(workspaceArg);
       bundle = createWorkspaceCompatibilityBundle(workspaceRoot);
       const result = bundle.docSynthesisService.buildDocSynthesis({
@@ -1409,10 +1500,16 @@ program
         ? PathSanitizer.sanitizeSubPath(featureRoot, 'doc-synthesis.md')
         : null;
 
-      if (artifactPath) {
-        fs.ensureDirSync(path.dirname(artifactPath));
-        fs.writeFileSync(artifactPath, result.markdown, 'utf-8');
-      }
+      const indexedArtifacts = options.write && artifactPath
+        ? writeAndIndexMarkdownArtifact(bundle, workspaceRoot, artifactPath, result.markdown)
+        : options.store
+          ? storeMarkdownArtifact(
+            bundle,
+            workspaceRoot,
+            buildStoredArtifactPath(workspaceRoot, options.feature, 'doc-synthesis.md'),
+            result.markdown
+          )
+          : null;
 
       if (useJson) {
         await writeStdout(formatJsonOutput({
@@ -1420,12 +1517,18 @@ program
           workspaceRoot,
           featurePath: featureRoot,
           synthesis: result,
-          artifactPath
+          artifactPath,
+          indexedArtifacts
         }));
       } else {
         await writeStdout(result.markdown);
-        if (artifactPath) {
+        if (options.write && artifactPath) {
           await writeStdout(`Artifact written: ${path.relative(workspaceRoot, artifactPath)}\n`);
+        }
+        if (options.store && indexedArtifacts) {
+          await writeStdout(`Artifact stored in flash-mem: ${indexedArtifacts.sources.join(', ')}\n`);
+        } else if (artifactPath && indexedArtifacts) {
+          await writeStdout(`Artifact indexed into memory: ${indexedArtifacts.sources.join(', ')}\n`);
         }
       }
 
