@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import * as crypto from 'crypto';
 import { MemoryEntry, MemoryEntryInput, MemoryEntrySchema } from '../../../domain/entities/MemoryEntry';
 import { Relationship } from '../../../domain/entities/Relationship';
 import { IMemoryEntryRepository, MemorySearchOptions } from '../../../domain/repositories/interfaces';
@@ -346,7 +347,13 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
     const sql = `
       SELECT me.id, me.project_id AS projectId, me.title, me.content, me.content_hash AS contentHash,
              me.category, me.source, me.confidence, me.summary, me.source_document_id AS sourceDocumentId,
-             me.created_at AS createdAt, me.updated_at AS updatedAt, me.deleted_at AS deletedAt
+             me.created_at AS createdAt, me.updated_at AS updatedAt, me.deleted_at AS deletedAt,
+             (
+               SELECT GROUP_CONCAT(t.name, ',')
+               FROM memory_entry_tags met
+               JOIN tags t ON t.id = met.tag_id
+               WHERE met.entry_id = me.id
+             ) AS tagsJoined
       FROM memory_entries me
       ${joins.join('\n      ')}
       WHERE ${whereClauses.join(' AND ')}
@@ -356,7 +363,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
 
     const results = rows.map((row) => {
       let score = 100;
-      const entryTags = this.listTagsForEntry(row.id);
+      const entryTags = row.tagsJoined ? row.tagsJoined.split(',').sort() : [];
 
       if (options.query) {
         const queryLower = options.query.trim().toLowerCase();
@@ -367,9 +374,9 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
           score = 100;
         } else if (titleLower.includes(queryLower)) {
           score = 80;
-        } else if (entryTags.some(t => t.toLowerCase() === queryLower)) {
+        } else if (entryTags.some((t: string) => t.toLowerCase() === queryLower)) {
           score = 90;
-        } else if (entryTags.some(t => t.toLowerCase().includes(queryLower))) {
+        } else if (entryTags.some((t: string) => t.toLowerCase().includes(queryLower))) {
           score = 70;
         } else if (contentLower.includes(queryLower)) {
           score = 50;
@@ -384,15 +391,21 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
         content: options.includeContent ? (row.content ?? '') : '',
         contentHash: options.includeContent ? mapped.contentHash : 'OMITTED',
         tags: entryTags,
-        relationships: this.listRelationshipsForEntry(row.id),
+        relationships: [] as Relationship[],
         score
       };
     });
 
     const limit = options.limit ?? 20;
-    return results
+    const sortedAndSliced = results
       .sort((left, right) => right.score - left.score || right.updatedAt - left.updatedAt)
       .slice(0, limit);
+
+    for (const result of sortedAndSliced) {
+      result.relationships = this.listRelationshipsForEntry(result.id);
+    }
+
+    return sortedAndSliced;
   }
 
   public refreshSearchIndex(entryId: string): void {
@@ -545,7 +558,13 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
       SELECT me.id, me.project_id AS projectId, me.title, ${contentSelect} AS content, me.content_hash AS contentHash,
              me.category, me.source, me.confidence, me.summary, me.source_document_id AS sourceDocumentId,
              me.created_at AS createdAt, me.updated_at AS updatedAt, me.deleted_at AS deletedAt,
-             fts.fts_rank AS ftsRank
+             fts.fts_rank AS ftsRank,
+             (
+               SELECT GROUP_CONCAT(t.name, ',')
+               FROM memory_entry_tags met
+               JOIN tags t ON t.id = met.tag_id
+               WHERE met.entry_id = me.id
+             ) AS tagsJoined
       FROM memory_entries me
       ${joins.join('\n      ')}
       WHERE ${whereClauses.join(' AND ')}
@@ -554,7 +573,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
     const rows = this.db.prepare(sql).all(...params) as Array<any & { ftsRank: number }>;
 
     const results = rows.map((row) => {
-      const entryTags = this.listTagsForEntry(row.id);
+      const entryTags = row.tagsJoined ? row.tagsJoined.split(',').sort() : [];
       const metadataScore = this.calculateMetadataScore(row.title, row.category, entryTags, query);
       const confidenceScore = this.calculateConfidenceScore(row.confidence);
       const recencyScore = this.calculateRecencyScore(row.updatedAt);
@@ -567,18 +586,24 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
         content: options.includeContent ? (row.content ?? '') : '',
         contentHash: options.includeContent ? mapped.contentHash : 'OMITTED',
         tags: entryTags,
-        relationships: this.listRelationshipsForEntry(row.id),
+        relationships: [] as Relationship[],
         score
       };
     });
 
     const limit = options.limit ?? 20;
-    return results
+    const sortedAndSliced = results
       .sort((left, right) => {
         const confidenceDiff = (right.confidence ?? 0) - (left.confidence ?? 0);
         return right.score - left.score || confidenceDiff || right.updatedAt - left.updatedAt || left.id.localeCompare(right.id);
       })
       .slice(0, limit);
+
+    for (const result of sortedAndSliced) {
+      result.relationships = this.listRelationshipsForEntry(result.id);
+    }
+
+    return sortedAndSliced;
   }
 
   private hasFtsSearchIndex(): boolean {
@@ -690,7 +715,7 @@ export class MemoryEntryRepository implements IMemoryEntryRepository {
   }
 
   private hashContent(title: string, content: string, category: string): string {
-    return Buffer.from(`${title}\n${content}\n${category}`).toString('base64');
+    return crypto.createHash('sha256').update(`${title}\n${content}\n${category}`).digest('hex');
   }
 
   private mapRowToEntry(row: any): MemoryEntry {

@@ -1,3 +1,5 @@
+import * as crypto from 'crypto';
+
 export interface CaptureDeduplicationInput {
   title: string;
   content: string;
@@ -6,6 +8,6 @@ export interface CaptureDeduplicationInput {
 
 export class CaptureDeduplicationGuard {
   public signature(input: CaptureDeduplicationInput): string {
-    return Buffer.from(`${input.title}\n${input.content}\n${input.category}`).toString('base64');
+    return crypto.createHash('sha256').update(`${input.title}\n${input.content}\n${input.category}`).digest('hex');
   }
 }

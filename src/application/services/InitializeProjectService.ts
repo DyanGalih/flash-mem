@@ -11,7 +11,7 @@ const PROTOCOL_END_MARKER_TEXT = '<!-- flash-mem-protocol-end -->';
 
 export type MemoryProtocolProfile = 'default' | 'strict';
 
-export type AgentInstructionTargetId = 'antigravity' | 'agents' | 'cursor' | 'cline' | 'copilot';
+export type AgentInstructionTargetId = 'antigravity' | 'agents' | 'cursor' | 'cline' | 'copilot' | 'codex';
 
 export interface AgentInstructionTargetDefinition {
   id: AgentInstructionTargetId;
@@ -34,10 +34,11 @@ export interface WriteAgentInstructionsResult {
 
 export const AGENT_INSTRUCTION_TARGETS: AgentInstructionTargetDefinition[] = [
   { id: 'antigravity', label: 'Antigravity', filePath: 'ANTIGRAVITY.md', kind: 'antigravity' },
-  { id: 'agents', label: 'Other AI Agents', filePath: 'AGENTS.md', kind: 'agent' },
   { id: 'cursor', label: 'Cursor', filePath: '.cursor/rules/flash-mem.mdc', kind: 'cursor' },
+  { id: 'copilot', label: 'GitHub Copilot', filePath: '.github/copilot-instructions.md', kind: 'copilot' },
+  { id: 'codex', label: 'Codex', filePath: 'AGENTS.md', kind: 'agent' },
   { id: 'cline', label: 'Cline', filePath: 'CLINE.md', kind: 'cline' },
-  { id: 'copilot', label: 'GitHub Copilot', filePath: '.github/copilot-instructions.md', kind: 'copilot' }
+  { id: 'agents', label: 'Other AI Agents', filePath: 'AGENTS.md', kind: 'agent' }
 ];
 
 export type McpTargetId = 'cursor' | 'copilot' | 'vscode' | 'codex' | 'antigravity-cli';
@@ -49,11 +50,11 @@ export interface McpTargetDefinition {
 }
 
 export const MCP_TARGETS: McpTargetDefinition[] = [
+  { id: 'antigravity-cli', label: 'Antigravity CLI (Global)', filePath: '~/.gemini/config/mcp_config.json' },
   { id: 'cursor', label: 'Cursor', filePath: '.cursor/mcp.json' },
   { id: 'copilot', label: 'GitHub Copilot', filePath: '.mcp.json' },
-  { id: 'vscode', label: 'VS Code / Antigravity IDE', filePath: '.vscode/mcp.json' },
   { id: 'codex', label: 'Codex', filePath: '.codex/config.toml' },
-  { id: 'antigravity-cli', label: 'Antigravity CLI (Global)', filePath: '~/.gemini/config/mcp_config.json' }
+  { id: 'vscode', label: 'VS Code / Antigravity IDE', filePath: '.vscode/mcp.json' }
 ];
 
 function buildAgentInstructionBlock(version: number, profile: MemoryProtocolProfile = 'default'): string {
@@ -422,8 +423,7 @@ export class InitializeProjectService {
       config.mcpServers['flash-mem'] = {
         command: "flash-mem",
         args: [
-          "mcp",
-          resolvedRoot
+          "mcp"
         ],
         env: {
           "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
