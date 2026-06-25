@@ -41,7 +41,7 @@ export const AGENT_INSTRUCTION_TARGETS: AgentInstructionTargetDefinition[] = [
   { id: 'agents', label: 'Other AI Agents', filePath: 'AGENTS.md', kind: 'agent' }
 ];
 
-export type McpTargetId = 'cursor' | 'copilot' | 'vscode' | 'codex' | 'antigravity-cli';
+export type McpTargetId = 'cursor' | 'copilot' | 'vscode' | 'codex' | 'antigravity-cli' | 'antigravity';
 
 export interface McpTargetDefinition {
   id: McpTargetId;
@@ -51,10 +51,11 @@ export interface McpTargetDefinition {
 
 export const MCP_TARGETS: McpTargetDefinition[] = [
   { id: 'antigravity-cli', label: 'Antigravity CLI (Global)', filePath: '~/.gemini/config/mcp_config.json' },
+  { id: 'antigravity', label: 'Antigravity IDE', filePath: '.agents/mcp.json' },
   { id: 'cursor', label: 'Cursor', filePath: '.cursor/mcp.json' },
   { id: 'copilot', label: 'GitHub Copilot', filePath: '.mcp.json' },
   { id: 'codex', label: 'Codex', filePath: '.codex/config.toml' },
-  { id: 'vscode', label: 'VS Code / Antigravity IDE', filePath: '.vscode/mcp.json' }
+  { id: 'vscode', label: 'VS Code', filePath: '.vscode/mcp.json' }
 ];
 
 function buildAgentInstructionBlock(version: number, profile: MemoryProtocolProfile = 'default'): string {
@@ -355,6 +356,11 @@ export class InitializeProjectService {
         id: "codex",
         filePath: ".codex/config.toml",
         content: this.renderCodexConfigTemplate(resolvedRoot)
+      },
+      {
+        id: "antigravity",
+        filePath: ".agents/mcp.json",
+        content: this.renderAntigravityMcpConfig(resolvedRoot)
       }
     ];
 
@@ -406,6 +412,15 @@ export class InitializeProjectService {
     });
   }
 
+  private renderAntigravityMcpConfig(resolvedRoot: string): string {
+    return this.renderLocalMcpJson({
+      rootKey: "mcpServers",
+      resolvedRoot,
+      includeType: false,
+      includeTools: false
+    });
+  }
+
   private updateAntigravityGlobalConfig(resolvedRoot: string): void {
     const geminiConfigPath = path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json');
     if (!fs.existsSync(geminiConfigPath)) {
@@ -423,7 +438,8 @@ export class InitializeProjectService {
       config.mcpServers['flash-mem'] = {
         command: "flash-mem",
         args: [
-          "mcp"
+          "mcp",
+          resolvedRoot
         ],
         env: {
           "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"

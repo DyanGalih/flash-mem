@@ -69,7 +69,7 @@ Use the global `flash-mem` command and let the extension provide the current wor
 
 ### Antigravity IDE
 
-Antigravity IDE automatically reads the `.vscode/mcp.json` file. The VS Code extension setup above works perfectly for Antigravity IDE without any global configuration.
+Antigravity IDE automatically reads the `.agents/mcp.json` file. Running `flash-mem init .` will scaffold this file for you automatically.
 
 ### Antigravity CLI
 
@@ -144,7 +144,7 @@ enabled = true
 
 ### Antigravity IDE
 
-Antigravity IDE automatically reads the `.vscode/mcp.json` file. The VS Code extension setup above works perfectly for Antigravity IDE. Running `flash-mem init .` will scaffold this file for you.
+Antigravity IDE automatically reads the `.agents/mcp.json` file. Running `flash-mem init .` will scaffold this file for you automatically.
 
 ### Antigravity CLI
 
@@ -183,6 +183,7 @@ If you prefer to configure it manually, add the following to `~/.gemini/config/m
   .github/copilot-instructions.md
   .cursor/mcp.json
   .mcp.json
+  .agents/mcp.json
   .vscode/mcp.json
   .codex/config.toml
   .flash-mem/
@@ -199,7 +200,8 @@ Notes:
 - `.github/copilot-instructions.md` is the GitHub Copilot instruction file written by init.
 - `.cursor/mcp.json` is for Cursor project-level MCP.
 - `.mcp.json` is for GitHub Copilot project-level MCP.
-- `.vscode/mcp.json` is for VS Code, Copilot, and Antigravity IDE setups that read the VS Code MCP format.
+- `.vscode/mcp.json` is for VS Code and Copilot setups that read the VS Code MCP format.
+- `.agents/mcp.json` is for Antigravity IDE project-level MCP.
 - `.codex/config.toml` is a repo-local Codex template; Codex still reads its active config from `~/.codex/config.toml`, so copy or symlink this file there if you want Codex to use it automatically.
 
 If the agent-instruction files already exist, use `flash-mem update .` to refresh the protocol block in place without touching the surrounding content.
