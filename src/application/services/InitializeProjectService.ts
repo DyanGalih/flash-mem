@@ -41,7 +41,7 @@ export const AGENT_INSTRUCTION_TARGETS: AgentInstructionTargetDefinition[] = [
   { id: 'agents', label: 'Other AI Agents', filePath: 'AGENTS.md', kind: 'agent' }
 ];
 
-export type McpTargetId = 'cursor' | 'copilot' | 'vscode' | 'codex' | 'antigravity-cli' | 'antigravity';
+export type McpTargetId = 'cursor' | 'copilot' | 'vscode' | 'codex' | 'antigravity-cli';
 
 export interface McpTargetDefinition {
   id: McpTargetId;
@@ -51,11 +51,10 @@ export interface McpTargetDefinition {
 
 export const MCP_TARGETS: McpTargetDefinition[] = [
   { id: 'antigravity-cli', label: 'Antigravity CLI (Global)', filePath: '~/.gemini/config/mcp_config.json' },
-  { id: 'antigravity', label: 'Antigravity IDE', filePath: '.agents/mcp.json' },
   { id: 'cursor', label: 'Cursor', filePath: '.cursor/mcp.json' },
   { id: 'copilot', label: 'GitHub Copilot', filePath: '.mcp.json' },
   { id: 'codex', label: 'Codex', filePath: '.codex/config.toml' },
-  { id: 'vscode', label: 'VS Code', filePath: '.vscode/mcp.json' }
+  { id: 'vscode', label: 'VS Code / Antigravity IDE', filePath: '.vscode/mcp.json' }
 ];
 
 function buildAgentInstructionBlock(version: number, profile: MemoryProtocolProfile = 'default'): string {

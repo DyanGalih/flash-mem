@@ -244,7 +244,7 @@ describe('CLI Integration', () => {
   it('should allow interactive init to create only the selected prompt files and MCP targets', async () => {
     const { stdout, stderr } = await execAsync(`node ${cliScript} init "${testWorkspace}" --interactive`, {
       tty: true,
-      input: ['1', '6'] // 1 for ANTIGRAVITY.md, 6 for .vscode/mcp.json
+      input: ['1', '5'] // 1 for ANTIGRAVITY.md, 5 for .vscode/mcp.json
     });
 
     expect(stderr).toBe('');
