@@ -355,11 +355,6 @@ export class InitializeProjectService {
         id: "codex",
         filePath: ".codex/config.toml",
         content: this.renderCodexConfigTemplate(resolvedRoot)
-      },
-      {
-        id: "antigravity",
-        filePath: ".agents/mcp.json",
-        content: this.renderAntigravityMcpConfig(resolvedRoot)
       }
     ];
 
@@ -404,19 +399,10 @@ export class InitializeProjectService {
 
   private renderVscodeMcpConfig(resolvedRoot: string): string {
     return this.renderLocalMcpJson({
-      rootKey: "servers",
+      rootKey: "mcpServers",
       resolvedRoot,
       includeType: true,
       includeTools: true
-    });
-  }
-
-  private renderAntigravityMcpConfig(resolvedRoot: string): string {
-    return this.renderLocalMcpJson({
-      rootKey: "mcpServers",
-      resolvedRoot,
-      includeType: false,
-      includeTools: false
     });
   }
 
