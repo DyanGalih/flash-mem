@@ -421,6 +421,10 @@ export class InitializeProjectService {
   }
 
   private updateAntigravityGlobalConfig(resolvedRoot: string): void {
+    if (process.env.NODE_ENV === 'test') {
+      return; // Do not modify global user config during tests
+    }
+
     const geminiConfigPath = path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json');
     if (!fs.existsSync(geminiConfigPath)) {
       return; // Do nothing if Antigravity is not installed or configured yet
