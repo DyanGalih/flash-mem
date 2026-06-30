@@ -33,7 +33,7 @@ export interface WriteAgentInstructionsResult {
 }
 
 export const AGENT_INSTRUCTION_TARGETS: AgentInstructionTargetDefinition[] = [
-  { id: 'antigravity', label: 'Antigravity', filePath: 'ANTIGRAVITY.md', kind: 'antigravity' },
+  { id: 'antigravity', label: 'Antigravity', filePath: '.agents/AGENTS.md', kind: 'antigravity' },
   { id: 'cursor', label: 'Cursor', filePath: '.cursor/rules/flash-mem.mdc', kind: 'cursor' },
   { id: 'copilot', label: 'GitHub Copilot', filePath: '.github/copilot-instructions.md', kind: 'copilot' },
   { id: 'codex', label: 'Codex', filePath: 'AGENTS.md', kind: 'agent' },
@@ -41,21 +41,7 @@ export const AGENT_INSTRUCTION_TARGETS: AgentInstructionTargetDefinition[] = [
   { id: 'agents', label: 'Other AI Agents', filePath: 'AGENTS.md', kind: 'agent' }
 ];
 
-export type McpTargetId = 'cursor' | 'copilot' | 'vscode' | 'codex' | 'antigravity-cli';
 
-export interface McpTargetDefinition {
-  id: McpTargetId;
-  label: string;
-  filePath: string;
-}
-
-export const MCP_TARGETS: McpTargetDefinition[] = [
-  { id: 'antigravity-cli', label: 'Antigravity CLI (Global)', filePath: '~/.gemini/config/mcp_config.json' },
-  { id: 'cursor', label: 'Cursor', filePath: '.cursor/mcp.json' },
-  { id: 'copilot', label: 'GitHub Copilot', filePath: '.mcp.json' },
-  { id: 'codex', label: 'Codex', filePath: '.codex/config.toml' },
-  { id: 'vscode', label: 'VS Code / Antigravity IDE', filePath: '.vscode/mcp.json' }
-];
 
 function buildAgentInstructionBlock(version: number, profile: MemoryProtocolProfile = 'default'): string {
   const startMarker = `${PROTOCOL_START_MARKER_TEXT} v${version} -->`;
@@ -111,7 +97,19 @@ function buildAgentInstructionBlock(version: number, profile: MemoryProtocolProf
     `## Do Not`,
     `- Do not write duplicate synthesis snapshots as separate durable memories.`,
     `- Do not dump broad low-confidence notes without verification markers.`,
-    `- Do not overwrite unrelated memory content when a targeted update is sufficient.`
+    `- Do not overwrite unrelated memory content when a targeted update is sufficient.`,
+    ``,
+    `## Forbidden Destructive Database Examples`,
+    `The policy is framework-agnostic. It applies to any language, framework, ORM, migration tool, database CLI, script, test helper, container command, or CI job that can erase or reset data.`,
+    `Forbidden examples include, but are not limited to:`,
+    `- Generic SQL / Database CLI: DROP DATABASE, DROP SCHEMA, DROP TABLE, destructive TRUNCATE, destructive DELETE FROM ... without a safe scoped condition, schema reset scripts, database wipe/reset shell scripts`,
+    `- Laravel / PHP: php artisan migrate:fresh, php artisan migrate:refresh, php artisan db:wipe`,
+    `- Node.js / JavaScript / TypeScript: Prisma destructive reset commands (e.g. prisma migrate reset), TypeORM schema synchronization or drop behavior against non-test databases, Sequelize destructive sync behavior (e.g. sync({ force: true })), Knex or custom migration reset scripts that drop tables or schemas`,
+    `- Ruby / Rails: rails db:drop, rails db:reset, rails db:migrate:reset`,
+    `- Python / Django / SQLAlchemy / Alembic: commands or scripts that drop and recreate schemas, migration reset scripts that erase existing data, test or seed scripts that truncate persistent tables outside isolated test databases`,
+    `- Java / JVM: Hibernate ddl-auto=create, create-drop, or equivalent destructive schema generation against persistent databases, Flyway or Liquibase clean/drop/reset actions against non-test databases`,
+    `- .NET: Entity Framework database delete/reset commands against persistent databases, migration or seed scripts that drop, truncate, or recreate production-like schemas`,
+    `- Containers / DevOps / CI: deleting persistent database volumes, running reset scripts against shared Docker Compose databases, CI/CD jobs that clean databases without proving the target is disposable, infrastructure scripts that replace or destroy persistent database resources`
   ];
 
   if (profile === 'strict') {
@@ -146,7 +144,7 @@ export class InitializeProjectService {
    * Initializes a flash-mem workspace directory structure, metadata, database, and ignores.
    * @param targetDirectory The directory to initialize (relative or absolute).
    */
-  public execute(targetDirectory: string, options: { promptTargetIds?: AgentInstructionTargetId[], mcpTargetIds?: McpTargetId[], profile?: MemoryProtocolProfile } = {}): InitializationResult {
+  public execute(targetDirectory: string, options: { promptTargetIds?: AgentInstructionTargetId[], profile?: MemoryProtocolProfile } = {}): InitializationResult {
     const resolvedRoot = PathSanitizer.resolveRoot(targetDirectory);
 
     // Verify root folder exists
@@ -217,7 +215,7 @@ export class InitializeProjectService {
 
     // 6. Automatically drop agent instruction files if they don't exist
     this.writeAgentInstructions(resolvedRoot, { targetIds: options.promptTargetIds, profile: options.profile });
-    this.writeProjectMcpConfigs(resolvedRoot, { targetIds: options.mcpTargetIds });
+
 
     return {
       success: true,
@@ -228,7 +226,7 @@ export class InitializeProjectService {
 
   // Increment this version number whenever the agent instruction template changes.
   // Existing files with an older version marker will be automatically updated.
-  private static readonly PROTOCOL_VERSION = 8;
+  private static readonly PROTOCOL_VERSION = 9;
   private static readonly PROTOCOL_START_MARKER = PROTOCOL_START_MARKER_TEXT;
   private static readonly PROTOCOL_END_MARKER = PROTOCOL_END_MARKER_TEXT;
 
@@ -334,155 +332,7 @@ export class InitializeProjectService {
     }
   }
 
-  private writeProjectMcpConfigs(resolvedRoot: string, options: { targetIds?: McpTargetId[] } = {}): void {
-    const allTargets = [
-      {
-        id: "cursor",
-        filePath: ".cursor/mcp.json",
-        content: this.renderCursorMcpConfig(resolvedRoot)
-      },
-      {
-        id: "copilot",
-        filePath: ".mcp.json",
-        content: this.renderCopilotMcpConfig(resolvedRoot)
-      },
-      {
-        id: "vscode",
-        filePath: ".vscode/mcp.json",
-        content: this.renderVscodeMcpConfig(resolvedRoot)
-      },
-      {
-        id: "codex",
-        filePath: ".codex/config.toml",
-        content: this.renderCodexConfigTemplate(resolvedRoot)
-      }
-    ];
 
-    const targets = options.targetIds
-      ? allTargets.filter(t => options.targetIds!.includes(t.id as McpTargetId))
-      : allTargets;
-
-    // Modify Antigravity global config directly if selected or if not restricted
-    if (!options.targetIds || options.targetIds.includes('antigravity-cli')) {
-      this.updateAntigravityGlobalConfig(resolvedRoot);
-    }
-
-    for (const target of targets) {
-      const filePath = path.join(resolvedRoot, target.filePath);
-      if (fs.existsSync(filePath)) {
-        continue;
-      }
-
-      fs.ensureDirSync(path.dirname(filePath));
-      fs.writeFileSync(filePath, target.content, "utf-8");
-      this.setPermissions(filePath, 0o600);
-    }
-  }
-
-  private renderCursorMcpConfig(resolvedRoot: string): string {
-    return this.renderLocalMcpJson({
-      rootKey: "mcpServers",
-      resolvedRoot,
-      includeType: false,
-      includeTools: false
-    });
-  }
-
-  private renderCopilotMcpConfig(resolvedRoot: string): string {
-    return this.renderLocalMcpJson({
-      rootKey: "mcpServers",
-      resolvedRoot,
-      includeType: true,
-      includeTools: true
-    });
-  }
-
-  private renderVscodeMcpConfig(resolvedRoot: string): string {
-    return this.renderLocalMcpJson({
-      rootKey: "mcpServers",
-      resolvedRoot,
-      includeType: true,
-      includeTools: true
-    });
-  }
-
-  private updateAntigravityGlobalConfig(resolvedRoot: string): void {
-    if (process.env.NODE_ENV === 'test') {
-      return; // Do not modify global user config during tests
-    }
-
-    const geminiConfigPath = path.join(os.homedir(), '.gemini', 'config', 'mcp_config.json');
-    if (!fs.existsSync(geminiConfigPath)) {
-      return; // Do nothing if Antigravity is not installed or configured yet
-    }
-
-    try {
-      const raw = fs.readFileSync(geminiConfigPath, 'utf-8');
-      const config = JSON.parse(raw);
-
-      if (!config.mcpServers) {
-        config.mcpServers = {};
-      }
-
-      config.mcpServers['flash-mem'] = {
-        command: "flash-mem",
-        args: [
-          "mcp",
-          resolvedRoot
-        ],
-        env: {
-          "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
-        }
-      };
-
-      fs.writeFileSync(geminiConfigPath, JSON.stringify(config, null, 2) + '\n', 'utf-8');
-    } catch (err) {
-      // Fail silently for global config updates to not break init on permission issues
-    }
-  }
-
-  private renderLocalMcpJson(options: {
-    rootKey: "mcpServers" | "servers";
-    resolvedRoot: string;
-    includeType: boolean;
-    includeTools: boolean;
-  }): string {
-    const serverConfig: Record<string, unknown> = {
-      command: "flash-mem",
-      args: ["mcp", options.resolvedRoot],
-      env: {
-        FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES: "1"
-      }
-    };
-
-    if (options.includeType) {
-      serverConfig.type = "local";
-    }
-
-    if (options.includeTools) {
-      serverConfig.tools = ["*"];
-    }
-
-    return JSON.stringify({
-      [options.rootKey]: {
-        "flash-mem": serverConfig
-      }
-    }, null, 2) + "\n";
-  }
-
-  private renderCodexConfigTemplate(resolvedRoot: string): string {
-    return [
-      "# Project-local Codex MCP template.",
-      "# Copy or symlink this file to ~/.codex/config.toml to activate it.",
-      "",
-      "[mcp_servers.flash_mem]",
-      "command = \"flash-mem\"",
-      "args = [\"mcp\", " + JSON.stringify(resolvedRoot) + "]",
-      "env = { FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES = \"1\" }",
-      "enabled = true",
-      ""
-    ].join("\n");
-  }
 
 
   private buildFreshMetadata(resolvedRoot: string): ProjectMetadata {

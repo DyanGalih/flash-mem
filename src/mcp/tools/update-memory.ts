@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import { MemoryEntryService } from '../../application/services/MemoryEntryService';
+import { WorkspaceManager } from "../WorkspaceManager";
 
 export const updateMemoryInputSchema = z.object({
-  id: z.string().min(1),
+    project_path: z.string().min(1).describe("Absolute path to the workspace root"),
+    id: z.string().min(1),
   title: z.string().min(1).optional(),
   content: z.string().min(1).optional(),
   category: z.string().min(1).optional(),
@@ -16,22 +18,23 @@ export const updateMemoryInputSchema = z.object({
   })).optional()
 });
 
-export function createUpdateMemoryTool(service: MemoryEntryService) {
+export function createUpdateMemoryTool(manager: WorkspaceManager) {
   return {
     name: 'update_memory',
     description: 'Update an existing durable memory entry.',
     schema: updateMemoryInputSchema,
     execute: (input: z.infer<typeof updateMemoryInputSchema>) => {
-      const { id, related_files, ...rest } = input;
-      const result = service.updateMemoryEntry(id, {
-        ...rest,
-        relatedFiles: related_files
-      } as any);
+      const service = manager.getBundle(input.project_path).memoryEntryService;
+          const { id, related_files, ...rest } = input;
+          const result = service.updateMemoryEntry(id, {
+            ...rest,
+            relatedFiles: related_files
+          } as any);
 
-      if (!result) {
-        throw new Error(`Memory entry "${id}" not found`);
-      }
-      return result;
-    }
+          if (!result) {
+            throw new Error(`Memory entry "${id}" not found`);
+          }
+          return result;
+        }
   };
 }

@@ -213,7 +213,7 @@ describe('CLI Integration', () => {
   it('should update agent instructions with update and keep inject-prompts as a compatibility alias', async () => {
     await execAsync(`node ${cliScript} init "${testWorkspace}"`);
 
-    const targetFile = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    const targetFile = path.join(testWorkspace, '.agents/AGENTS.md');
     fs.writeFileSync(
       targetFile,
       [
@@ -244,14 +244,14 @@ describe('CLI Integration', () => {
   it('should allow interactive init to create only the selected prompt files and MCP targets', async () => {
     const { stdout, stderr } = await execAsync(`node ${cliScript} init "${testWorkspace}" --interactive`, {
       tty: true,
-      input: ['1', '5'] // 1 for ANTIGRAVITY.md, 5 for .vscode/mcp.json
+      input: ['1', '5'] // 1 for .agents/AGENTS.md, 5 for .vscode/mcp.json
     });
 
     expect(stderr).toBe('');
     expect(stdout).toContain('flash-mem initialized successfully at:');
 
     // Agent instructions check
-    expect(fs.existsSync(path.join(testWorkspace, 'ANTIGRAVITY.md'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.agents/AGENTS.md'))).toBe(true);
     expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
     expect(fs.existsSync(path.join(testWorkspace, '.cursorrules'))).toBe(false);
 
@@ -719,7 +719,7 @@ describe('CLI Integration', () => {
   it('should initialize with default profile when --profile is not specified', async () => {
     await execAsync(`node ${cliScript} init "${testWorkspace}"`);
 
-    const antigravityPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    const antigravityPath = path.join(testWorkspace, '.agents/AGENTS.md');
     const content = fs.readFileSync(antigravityPath, 'utf-8');
 
     expect(content).toContain('## Memory Quality');
@@ -729,7 +729,7 @@ describe('CLI Integration', () => {
   it('should initialize with strict profile when --profile strict is specified', async () => {
     await execAsync(`node ${cliScript} init "${testWorkspace}" --profile strict`);
 
-    const antigravityPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    const antigravityPath = path.join(testWorkspace, '.agents/AGENTS.md');
     const content = fs.readFileSync(antigravityPath, 'utf-8');
 
     expect(content).toContain('## Strict Governance');
@@ -741,7 +741,7 @@ describe('CLI Integration', () => {
     // Initialize with default profile
     await execAsync(`node ${cliScript} init "${testWorkspace}"`);
 
-    const antigravityPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    const antigravityPath = path.join(testWorkspace, '.agents/AGENTS.md');
     let content = fs.readFileSync(antigravityPath, 'utf-8');
     expect(content).not.toContain('## Strict Governance');
 

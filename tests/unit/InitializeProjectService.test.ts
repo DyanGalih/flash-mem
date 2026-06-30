@@ -25,13 +25,7 @@ describe('InitializeProjectService Unit', () => {
     // Folders check
     expect(fs.existsSync(path.join(testWorkspace, '.flash-mem'))).toBe(true);
     expect(fs.existsSync(path.join(testWorkspace, '.flash-mem/exports'))).toBe(true);
-    expect(fs.existsSync(path.join(testWorkspace, '.cursor', 'mcp.json'))).toBe(true);
-    expect(fs.existsSync(path.join(testWorkspace, '.mcp.json'))).toBe(true);
-    expect(fs.existsSync(path.join(testWorkspace, '.vscode', 'mcp.json'))).toBe(true);
-    expect(fs.existsSync(path.join(testWorkspace, '.codex', 'config.toml'))).toBe(true);
-    expect(fs.readFileSync(path.join(testWorkspace, '.codex', 'config.toml'), 'utf-8')).toContain(
-      'FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES = "1"'
-    );
+
 
     // Metadata file check
     const indexJsonPath = path.join(testWorkspace, '.flash-mem/index.json');
@@ -88,22 +82,16 @@ describe('InitializeProjectService Unit', () => {
   it('should create only selected prompt targets during interactive-style init', () => {
     service.execute(testWorkspace, { promptTargetIds: ['antigravity'] });
 
-    expect(fs.existsSync(path.join(testWorkspace, 'ANTIGRAVITY.md'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, '.agents/AGENTS.md'))).toBe(true);
     expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
     expect(fs.existsSync(path.join(testWorkspace, '.cursorrules'))).toBe(false);
   });
 
-  it('should create only selected MCP targets during interactive-style init', () => {
-    service.execute(testWorkspace, { mcpTargetIds: ['vscode'] });
 
-    expect(fs.existsSync(path.join(testWorkspace, '.vscode', 'mcp.json'))).toBe(true);
-    expect(fs.existsSync(path.join(testWorkspace, '.cursor', 'mcp.json'))).toBe(false);
-    expect(fs.existsSync(path.join(testWorkspace, '.mcp.json'))).toBe(false);
-    expect(fs.existsSync(path.join(testWorkspace, '.codex', 'config.toml'))).toBe(false);
-  });
 
   it('should detect and update only existing prompt targets when requested', () => {
-    const targetPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    const targetPath = path.join(testWorkspace, '.agents/AGENTS.md');
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     fs.writeFileSync(
       targetPath,
       [
@@ -117,10 +105,10 @@ describe('InitializeProjectService Unit', () => {
 
     const result = service.writeAgentInstructions(testWorkspace, { existingOnly: true });
 
-    expect(result.detected.map((target) => target.filePath)).toEqual(['ANTIGRAVITY.md']);
+    expect(result.detected.map((target) => target.filePath)).toEqual(['.agents/AGENTS.md']);
     expect(result.updated).toContain(targetPath);
     const updatedContent = fs.readFileSync(targetPath, 'utf-8');
-    expect(updatedContent).toContain('<!-- flash-mem-protocol-start v8 -->');
+    expect(updatedContent).toContain('<!-- flash-mem-protocol-start v9 -->');
     expect(updatedContent).toContain('Treat flash-mem as the source of truth for durable project memory.');
     expect(updatedContent).toContain('If flash-mem retrieval is empty or incomplete, inspect the markdown file and do not skip `capture_artifact_memory`; if it contains durable knowledge, capture it before treating it as current context.');
     expect(updatedContent).toContain('If `capture_artifact_memory` still returns nothing useful, keep the markdown file as the backup artifact.');
@@ -157,11 +145,12 @@ describe('InitializeProjectService Unit', () => {
   it('should use default profile when not specified', () => {
     service.execute(testWorkspace);
 
-    const antigravityPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    const antigravityPath = path.join(testWorkspace, '.agents/AGENTS.md');
     const content = fs.readFileSync(antigravityPath, 'utf-8');
 
     expect(content).toContain('Treat flash-mem as the source of truth for durable project memory.');
     expect(content).toContain('If flash-mem retrieval is empty or incomplete, inspect the markdown file and do not skip `capture_artifact_memory`; if it contains durable knowledge, capture it before treating it as current context.');
+    expect(content).toContain('## Forbidden Destructive Database Examples');
     expect(content).toContain('keep the markdown file as the backup artifact');
     expect(content).toContain('never skip capture just because the file already exists');
     expect(content).toContain('## Memory Quality');
@@ -172,7 +161,7 @@ describe('InitializeProjectService Unit', () => {
   it('should inject strict governance guidance when strict profile is selected', () => {
     service.execute(testWorkspace, { profile: 'strict' });
 
-    const antigravityPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    const antigravityPath = path.join(testWorkspace, '.agents/AGENTS.md');
     const content = fs.readFileSync(antigravityPath, 'utf-8');
 
     expect(content).toContain('## Strict Governance');
@@ -187,7 +176,7 @@ describe('InitializeProjectService Unit', () => {
     // Initial init with default profile
     service.execute(testWorkspace);
 
-    const antigravityPath = path.join(testWorkspace, 'ANTIGRAVITY.md');
+    const antigravityPath = path.join(testWorkspace, '.agents/AGENTS.md');
     let content = fs.readFileSync(antigravityPath, 'utf-8');
     expect(content).not.toContain('## Strict Governance');
 

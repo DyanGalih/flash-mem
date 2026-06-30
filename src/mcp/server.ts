@@ -64,9 +64,7 @@ import { createUpdateMemoryTool } from './tools/update-memory';
 import { createUpdateProjectSummaryTool } from './tools/update-project-summary';
 
 export interface McpServerContext {
-  db: Database.Database;
-  workspaceRoot: string;
-  summaryWriteAccessEnabled?: boolean;
+    manager: import("./WorkspaceManager").WorkspaceManager;
 }
 
 type McpToolDefinition = {
@@ -92,182 +90,74 @@ function withFormattedResponse<T extends McpToolDefinition>(tool: T): T {
 }
 
 export function createMcpServer(context: McpServerContext) {
-  const projectRepository = new ProjectRepository(context.db);
-  const workspaceProject = projectRepository.upsertByRootPath(context.workspaceRoot, path.basename(context.workspaceRoot));
-  const memoryEntryRepository = new MemoryEntryRepository(context.db);
-  const projectSummaryRepository = new ProjectSummaryRepository(context.db);
-  const tagRepository = new TagRepository(context.db);
-  const relationshipRepository = new RelationshipRepository(context.db);
-  const sourceDocumentRepository = new SourceDocumentRepository(context.db);
-  const indexingRunRepository = new IndexingRunRepository(context.db);
-  const transactionRunner = new SqliteTransactionRunner(context.db);
-  const backgroundExportScheduler = new BackgroundMarkdownExportScheduler(
-    new DetachedMarkdownExportLauncher({ enabled: process.env.VITEST !== 'true' && process.env.FLASH_MEM_DISABLE_BACKGROUND_EXPORT !== '1' }),
-    resolveBackgroundMarkdownExportDelayMs()
-  );
 
-  const memoryEntryService = new MemoryEntryService(
-    projectRepository,
-    memoryEntryRepository,
-    tagRepository,
-    relationshipRepository,
-    sourceDocumentRepository,
-    transactionRunner,
-    backgroundExportScheduler
-  );
-  const memorySearchService = new MemorySearchService(memoryEntryRepository, tagRepository, projectRepository);
-  const schemaMigrationService = new SchemaMigrationService(context.db);
-  const artifactMemoryCaptureService = new ArtifactMemoryCaptureService(
-    context.workspaceRoot,
-    projectRepository,
-    memoryEntryRepository,
-    sourceDocumentRepository,
-    transactionRunner,
-    new ArtifactReader(),
-    { resolveRoot: (root) => PathSanitizer.resolveRoot(root) },
-    { redact: (value) => SecretScanner.redact(value) },
-    new CaptureDeduplicationGuard()
-  );
+      const server = new Server({
+        name: 'flash-mem',
+        version: '0.2.0'
+      });
 
-  const indexingService = new IndexingService(
-    projectRepository,
-    sourceDocumentRepository,
-    indexingRunRepository,
-    memoryEntryService,
-    schemaMigrationService,
-    transactionRunner
-  );
-  const markdownArtifactIngestionService = new MarkdownArtifactIngestionService(projectRepository, indexingService);
-  const markdownExportService = new MarkdownExportService(
-    projectRepository,
-    projectSummaryRepository,
-    memoryEntryRepository,
-    tagRepository,
-    relationshipRepository,
-    sourceDocumentRepository,
-    schemaMigrationService
-  );
-  const markdownRestoreService = new MarkdownRestoreService(
-    projectRepository,
-    memoryEntryRepository,
-    tagRepository,
-    relationshipRepository,
-    sourceDocumentRepository,
-    schemaMigrationService,
-    transactionRunner,
-    backgroundExportScheduler
-  );
-  const projectSummaryService = new ProjectSummaryService(
-    workspaceProject.id,
-    projectRepository,
-    projectSummaryRepository
-  );
-  const relevantContextService = new RelevantContextService(
-    projectRepository,
-    memorySearchService
-  );
-  const memorySynthesisService = new MemorySynthesisService(
-    projectRepository,
-    projectSummaryService,
-    relevantContextService
-  );
-  const docSynthesisService = new DocSynthesisService();
-  const sharedLessonRepository = new SharedLessonRepository(context.db);
-  const globalDb = getGlobalHubDatabase();
-  const globalSharedLessonRepository = new SharedLessonRepository(globalDb);
-  const sharedLessonService = new SharedLessonService(sharedLessonRepository, globalSharedLessonRepository);
-  const compatibilityService = new SpecKitCompatibilityService(
-    memorySynthesisService,
-    docSynthesisService,
-    sharedLessonService,
-    new TokenBudgetService(),
-    undefined,
-    undefined,
-    markdownArtifactIngestionService
-  );
-  const workspaceIndexingService = new WorkspaceIndexingService(
-    indexingService,
-    projectRepository
-  );
+      const manager = context.manager;
 
-  const server = new Server({
-    name: 'flash-mem',
-    version: '0.2.0'
-  });
+      const getProjectSummaryTool = withFormattedResponse(createGetProjectSummaryTool(manager));
+      const updateProjectSummaryTool = withFormattedResponse(createUpdateProjectSummaryTool(manager));
+      const searchMemoryTool = withFormattedResponse(createSearchMemoryTool(manager));
+      const addMemoryTool = withFormattedResponse(createAddMemoryTool(manager));
+      const updateMemoryTool = withFormattedResponse(createUpdateMemoryTool(manager));
+      const addMemoryRelationshipTool = withFormattedResponse(createAddMemoryRelationshipTool(manager));
+      const rebuildIndexTool = withFormattedResponse(createRebuildIndexTool(manager));
+      const captureArtifactMemoryTool = withFormattedResponse(createCaptureArtifactMemoryTool(manager));
+      const getRelevantContextTool = withFormattedResponse(createGetRelevantContextTool(manager));
+      const deleteMemoryTool = withFormattedResponse(createDeleteMemoryTool(manager));
+      const exportMarkdownTool = withFormattedResponse(createExportMarkdownTool(manager));
+      const indexingTool = withFormattedResponse(createIndexingTool(manager));
+      const restoreBackupTool = withFormattedResponse(createRestoreBackupTool(manager));
+      const prepareContextTool = withFormattedResponse(createPrepareContextTool(manager));
+      const memorySynthesisCompatTool = withFormattedResponse(createMemorySynthesisTool(manager));
+      const docSynthesisCompatTool = withFormattedResponse(createDocSynthesisTool(manager));
+      const tokenReportTool = withFormattedResponse(createTokenReportTool(manager));
+      const promoteSharedLessonTool = withFormattedResponse(createPromoteSharedLessonTool(manager));
+      const syncSharedLessonsTool = withFormattedResponse(createSyncSharedLessonsTool(manager));
+      const initializeProjectTool = withFormattedResponse(createSpeckitMemoryInitProjectTool(manager));
+      const speckitMemorySearchTool = withFormattedResponse(createSpeckitMemorySearchTool(manager));
+      const speckitMemorySynthesizeTool = withFormattedResponse(createSpeckitMemorySynthesizeTool(manager));
+      const speckitMemoryTokenReportTool = withFormattedResponse(createSpeckitMemoryTokenReportTool(manager));
+      const speckitMemoryShareLessonTool = withFormattedResponse(createSpeckitMemoryShareLessonTool(manager));
+      const speckitMemorySyncSharedTool = withFormattedResponse(createSpeckitMemorySyncSharedTool(manager));
 
-  // Canonical workflow tools first.
-  const getProjectSummaryTool = withFormattedResponse(createGetProjectSummaryTool(projectSummaryService));
-  const updateProjectSummaryTool = withFormattedResponse(createUpdateProjectSummaryTool(projectSummaryService, {
-    canWriteProjectSummary: context.summaryWriteAccessEnabled === true
-  }));
-  const searchMemoryTool = withFormattedResponse(createSearchMemoryTool(memorySearchService));
-  const addMemoryTool = withFormattedResponse(createAddMemoryTool(memoryEntryService));
-  const updateMemoryTool = withFormattedResponse(createUpdateMemoryTool(memoryEntryService));
-  const addMemoryRelationshipTool = withFormattedResponse(createAddMemoryRelationshipTool(memoryEntryService));
-  const rebuildIndexTool = withFormattedResponse(createRebuildIndexTool(workspaceIndexingService));
-  const captureArtifactMemoryTool = withFormattedResponse(createCaptureArtifactMemoryTool(artifactMemoryCaptureService));
-  const getRelevantContextTool = withFormattedResponse(createGetRelevantContextTool(relevantContextService));
-  const deleteMemoryTool = withFormattedResponse(createDeleteMemoryTool(memoryEntryService));
-  const exportMarkdownTool = withFormattedResponse(createExportMarkdownTool(markdownExportService));
-  const indexingTool = withFormattedResponse(createIndexingTool(indexingService));
-  const restoreBackupTool = withFormattedResponse(createRestoreBackupTool(markdownRestoreService));
-  const prepareContextTool = withFormattedResponse(createPrepareContextTool(compatibilityService, context.workspaceRoot));
-  const memorySynthesisCompatTool = withFormattedResponse(createMemorySynthesisTool(memorySynthesisService, context.workspaceRoot));
-  const docSynthesisCompatTool = withFormattedResponse(createDocSynthesisTool(docSynthesisService, context.workspaceRoot));
-  const tokenReportTool = withFormattedResponse(createTokenReportTool(compatibilityService, context.workspaceRoot));
-  const promoteSharedLessonTool = withFormattedResponse(createPromoteSharedLessonTool(compatibilityService, context.workspaceRoot));
-  const syncSharedLessonsTool = withFormattedResponse(createSyncSharedLessonsTool(compatibilityService, context.workspaceRoot));
-  const initializeProjectTool = withFormattedResponse(createSpeckitMemoryInitProjectTool(compatibilityService, context.workspaceRoot));
-  const speckitMemorySearchTool = withFormattedResponse(createSpeckitMemorySearchTool(memorySearchService, projectRepository, context.workspaceRoot));
-  const speckitMemorySynthesizeTool = withFormattedResponse(createSpeckitMemorySynthesizeTool(memorySynthesisService, context.workspaceRoot));
-  const speckitMemoryTokenReportTool = withFormattedResponse(createSpeckitMemoryTokenReportTool(compatibilityService, context.workspaceRoot));
-  const speckitMemoryShareLessonTool = withFormattedResponse(createSpeckitMemoryShareLessonTool(compatibilityService, context.workspaceRoot));
-  const speckitMemorySyncSharedTool = withFormattedResponse(createSpeckitMemorySyncSharedTool(compatibilityService, context.workspaceRoot));
+      server
+        .registerTool(getProjectSummaryTool)
+        .registerTool(updateProjectSummaryTool)
+        .registerTool(searchMemoryTool)
+        .registerTool(getRelevantContextTool)
+        .registerTool(addMemoryTool)
+        .registerTool(updateMemoryTool)
+        .registerTool(deleteMemoryTool)
+        .registerTool(captureArtifactMemoryTool)
+        .registerTool(exportMarkdownTool)
+        .registerTool(rebuildIndexTool)
+        .registerTool(createToolAlias(getProjectSummaryTool, 'memory_project_summary_get'))
+        .registerTool(createToolAlias(updateProjectSummaryTool, 'memory_project_summary_update'))
+        .registerTool(createToolAlias(searchMemoryTool, 'memory_search'))
+        .registerTool(createToolAlias(addMemoryTool, 'memory_entry_create'))
+        .registerTool(createToolAlias(updateMemoryTool, 'memory_entry_update'))
+        .registerTool(createToolAlias(addMemoryRelationshipTool, 'memory_relationship_create'))
+        .registerTool(addMemoryRelationshipTool)
+        .registerTool(indexingTool)
+        .registerTool(restoreBackupTool)
+        .registerTool(prepareContextTool)
+        .registerTool(memorySynthesisCompatTool)
+        .registerTool(docSynthesisCompatTool)
+        .registerTool(tokenReportTool)
+        .registerTool(promoteSharedLessonTool)
+        .registerTool(syncSharedLessonsTool)
+        .registerTool(initializeProjectTool)
+        .registerTool(speckitMemorySearchTool)
+        .registerTool(speckitMemorySynthesizeTool)
+        .registerTool(speckitMemoryTokenReportTool)
+        .registerTool(speckitMemoryShareLessonTool)
+        .registerTool(speckitMemorySyncSharedTool);
 
-  server
-    .registerTool(getProjectSummaryTool)
-    .registerTool(updateProjectSummaryTool)
-    .registerTool(searchMemoryTool)
-    .registerTool(getRelevantContextTool)
-    .registerTool(addMemoryTool)
-    .registerTool(updateMemoryTool)
-    .registerTool(deleteMemoryTool)
-    .registerTool(captureArtifactMemoryTool)
-    .registerTool(exportMarkdownTool)
-    .registerTool(rebuildIndexTool)
-
-    // Compatibility aliases.
-    .registerTool(createToolAlias(getProjectSummaryTool, 'memory_project_summary_get'))
-    .registerTool(createToolAlias(updateProjectSummaryTool, 'memory_project_summary_update'))
-    .registerTool(createToolAlias(searchMemoryTool, 'memory_search'))
-    .registerTool(createToolAlias(addMemoryTool, 'memory_entry_create'))
-    .registerTool(createToolAlias(updateMemoryTool, 'memory_entry_update'))
-    .registerTool(createToolAlias(addMemoryRelationshipTool, 'memory_relationship_create'))
-
-    // Advanced / admin tools.
-    .registerTool(addMemoryRelationshipTool)
-    .registerTool(indexingTool)
-    .registerTool(restoreBackupTool)
-
-    // Spec Kit compatibility tools.
-    .registerTool(prepareContextTool)
-    .registerTool(memorySynthesisCompatTool)
-    .registerTool(docSynthesisCompatTool)
-    .registerTool(tokenReportTool)
-    .registerTool(promoteSharedLessonTool)
-    .registerTool(syncSharedLessonsTool)
-    .registerTool(createToolAlias(memorySynthesisCompatTool, 'generate_memory_synthesis'))
-    .registerTool(createToolAlias(docSynthesisCompatTool, 'generate_doc_synthesis'))
-
-    // Memory-hub compatibility wrappers.
-    .registerTool(speckitMemorySearchTool)
-    .registerTool(speckitMemorySynthesizeTool)
-    .registerTool(speckitMemoryTokenReportTool)
-    .registerTool(speckitMemoryShareLessonTool)
-    .registerTool(speckitMemorySyncSharedTool)
-    .registerTool(initializeProjectTool);
-
-  return server;
+      return server;
 }
 
 export interface McpStdioServerOptions {

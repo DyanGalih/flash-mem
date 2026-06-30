@@ -8,6 +8,7 @@ import { createDatabaseConnection } from '../../src/infrastructure/database/conn
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
 import { decodeToon } from '../../src/infrastructure/llm/toon';
 import { createMcpServer, startMcpServer } from '../../src/mcp/server';
+import { WorkspaceManager } from '../../src/mcp/WorkspaceManager';
 
 describe('MCP Server Foundation', () => {
   let db: any;
@@ -40,7 +41,8 @@ describe('MCP Server Foundation', () => {
 
   it('registers the required tools with schemas', () => {
     const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
-    const server = createMcpServer({ db, workspaceRoot });
+    const manager = new WorkspaceManager();
+    const server = createMcpServer({ manager });
     const tools = server.listTools();
 
     const toolNames = tools.map((tool) => tool.name);
@@ -92,7 +94,8 @@ describe('MCP Server Foundation', () => {
 
   it('discovers the required tools within the startup target window', () => {
     const start = performance.now();
-    const server = createMcpServer({ db, workspaceRoot });
+    const manager = new WorkspaceManager();
+    const server = createMcpServer({ manager });
     const elapsed = performance.now() - start;
 
     expect(server.listTools().map((tool) => tool.name).slice(0, 10)).toEqual([
@@ -112,7 +115,8 @@ describe('MCP Server Foundation', () => {
 
   it('responds to JSON-RPC tool listing and tool calls', async () => {
     const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
-    const server = createMcpServer({ db, workspaceRoot });
+    const manager = new WorkspaceManager();
+    const server = createMcpServer({ manager });
 
     const listResponse = await server.handleRequest({
       jsonrpc: '2.0',
@@ -135,7 +139,8 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'add_memory',
         arguments: {
-          projectId: project.id,
+          project_path: workspaceRoot,
+          project_path: workspaceRoot,
           title: 'SDK-backed entry',
           content: 'Created through JSON-RPC',
           category: 'project',
@@ -151,7 +156,8 @@ describe('MCP Server Foundation', () => {
 
   it('supports update_memory tool with PATCH semantics and null clearing', async () => {
     const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
-    const server = createMcpServer({ db, workspaceRoot });
+    const manager = new WorkspaceManager();
+    const server = createMcpServer({ manager });
 
     // 1. Add entry
     const addResponse = (await server.handleRequest({
@@ -161,7 +167,8 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'add_memory',
         arguments: {
-          projectId: project.id,
+          project_path: workspaceRoot,
+          project_path: workspaceRoot,
           title: 'Patch me',
           content: 'Original content',
           category: 'project',
@@ -185,6 +192,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'update_memory',
         arguments: {
+          project_path: workspaceRoot,
           id: entryId,
           confidence: 95,
           related_files: null
@@ -200,7 +208,8 @@ describe('MCP Server Foundation', () => {
 
   it('supports backward-compatible alias tools for retrieval and writes', async () => {
     const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
-    const server = createMcpServer({ db, workspaceRoot });
+    const manager = new WorkspaceManager();
+    const server = createMcpServer({ manager });
 
     const addResponse = (await server.handleRequest({
       jsonrpc: '2.0',
@@ -209,7 +218,8 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'memory_entry_create',
         arguments: {
-          projectId: project.id,
+          project_path: workspaceRoot,
+          project_path: workspaceRoot,
           title: 'Alias entry',
           content: 'Created via compatibility alias',
           category: 'project',
@@ -229,7 +239,8 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'memory_search',
         arguments: {
-          projectId: project.id,
+          project_path: workspaceRoot,
+          project_path: workspaceRoot,
           query: 'Alias entry'
         }
       }
@@ -247,6 +258,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'memory_entry_update',
         arguments: {
+          project_path: workspaceRoot,
           id: entryId,
           confidence: 91
         }
@@ -259,7 +271,8 @@ describe('MCP Server Foundation', () => {
 
   it('supports delete_memory tool with soft delete', async () => {
     const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
-    const server = createMcpServer({ db, workspaceRoot });
+    const manager = new WorkspaceManager();
+    const server = createMcpServer({ manager });
 
     // 1. Add entry
     const addResponse = (await server.handleRequest({
@@ -269,7 +282,8 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'add_memory',
         arguments: {
-          projectId: project.id,
+          project_path: workspaceRoot,
+          project_path: workspaceRoot,
           title: 'Delete me',
           content: 'Will be soft deleted',
           category: 'project',
@@ -289,6 +303,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'delete_memory',
         arguments: {
+          project_path: workspaceRoot,
           id: entryId
         }
       }
@@ -306,6 +321,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'delete_memory',
         arguments: {
+          project_path: workspaceRoot,
           id: entryId
         }
       }
@@ -317,7 +333,8 @@ describe('MCP Server Foundation', () => {
 
   it('keeps the first-attempt success rate above the reliability target', async () => {
     const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
-    const server = createMcpServer({ db, workspaceRoot });
+    const manager = new WorkspaceManager();
+    const server = createMcpServer({ manager });
     const attempts = 20;
     let successes = 0;
 
@@ -329,6 +346,7 @@ describe('MCP Server Foundation', () => {
         params: {
           name: 'search_memory',
           arguments: {
+          project_path: workspaceRoot,
             projectId: project.id,
             query: 'workspace'
           }
@@ -366,7 +384,10 @@ describe('MCP Server Foundation', () => {
       method: 'tools/call',
       params: {
         name: 'get_project_summary',
-        arguments: {}
+        arguments: {
+          project_path: workspaceRoot,
+          project_path: workspaceRoot
+        }
       }
     })}\n`);
     input.end();
@@ -383,7 +404,8 @@ describe('MCP Server Foundation', () => {
 
   it('supports get and update project summary tools without projectId arguments', async () => {
     const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
-    const server = createMcpServer({ db, workspaceRoot, summaryWriteAccessEnabled: true });
+    const manager = new WorkspaceManager();
+    const server = createMcpServer({ manager });
 
     const emptyResponse = await server.handleRequest({
       jsonrpc: '2.0',
@@ -391,7 +413,10 @@ describe('MCP Server Foundation', () => {
       method: 'tools/call',
       params: {
         name: 'get_project_summary',
-        arguments: {}
+        arguments: {
+          project_path: workspaceRoot,
+          project_path: workspaceRoot
+        }
       }
     });
 
@@ -407,6 +432,8 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'update_project_summary',
         arguments: {
+          project_path: workspaceRoot,
+          project_path: workspaceRoot,
           projectName: 'mcp-tools-workspace',
           purpose: 'Compact project summary for AI agents',
           techStack: 'Node.js, TypeScript, better-sqlite3, Zod',
@@ -435,7 +462,8 @@ describe('MCP Server Foundation', () => {
       method: 'tools/call',
       params: {
         name: 'get_project_summary',
-        arguments: {}
+        arguments: {
+          project_path: workspaceRoot,}
       }
     });
 
@@ -451,7 +479,8 @@ describe('MCP Server Foundation', () => {
   });
 
   it('captures reusable knowledge from markdown artifacts and skips duplicates', async () => {
-    const server = createMcpServer({ db, workspaceRoot });
+    const manager = new WorkspaceManager();
+    const server = createMcpServer({ manager });
     const artifactPath = path.join(workspaceRoot, 'specs', 'capture-target.md');
     fs.ensureDirSync(path.dirname(artifactPath));
     fs.writeFileSync(
@@ -467,6 +496,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'capture_artifact_memory',
         arguments: {
+          project_path: workspaceRoot,
           artifactPath: 'specs/capture-target.md',
           sourceType: 'spec'
         }
@@ -487,6 +517,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'capture_artifact_memory',
         arguments: {
+          project_path: workspaceRoot,
           artifactPath: 'specs/capture-target.md',
           sourceType: 'spec'
         }
@@ -503,7 +534,8 @@ describe('MCP Server Foundation', () => {
 
   it('prepares combined context through the compatibility layer', async () => {
     const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
-    const server = createMcpServer({ db, workspaceRoot });
+    const manager = new WorkspaceManager();
+    const server = createMcpServer({ manager });
     const featurePath = path.join(workspaceRoot, 'specs', 'feature-a');
     fs.ensureDirSync(featurePath);
     fs.writeFileSync(path.join(featurePath, 'spec.md'), '# Feature A\n\nMemory-first planning.', 'utf-8');
@@ -515,7 +547,8 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'add_memory',
         arguments: {
-          projectId: project.id,
+          project_path: workspaceRoot,
+          project_path: workspaceRoot,
           title: 'Memory-first planning',
           content: 'Search memory before plan generation.',
           category: 'decision',
@@ -531,6 +564,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'prepare_context',
         arguments: {
+          project_path: workspaceRoot,
           workspaceRoot,
           featurePath: 'specs/feature-a',
           query: 'memory-first'
@@ -551,7 +585,8 @@ describe('MCP Server Foundation', () => {
   });
 
   it('supports memory-hub-compatible speckit tool names with normalized arguments', async () => {
-    const server = createMcpServer({ db, workspaceRoot });
+    const manager = new WorkspaceManager();
+    const server = createMcpServer({ manager });
 
     const initResponse = await server.handleRequest({
       jsonrpc: '2.0',
@@ -560,6 +595,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'speckit_memory_init_project',
         arguments: {
+          project_path: workspaceRoot,
           projectRoot: workspaceRoot,
           language: 'typescript',
           framework: 'nest'
@@ -604,6 +640,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'add_memory',
         arguments: {
+          project_path: workspaceRoot,
           projectId: searchProject.id,
           title: 'Memory-hub compatibility',
           content: 'Keep the compatibility layer additive.',
@@ -620,6 +657,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'speckit_memory_search',
         arguments: {
+          project_path: workspaceRoot,
           projectRoot: workspaceRoot,
           query: 'compatibility'
         }
@@ -639,6 +677,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'speckit_memory_synthesize',
         arguments: {
+          project_path: workspaceRoot,
           projectRoot: workspaceRoot,
           feature: 'specs/feature-b',
           query: 'compatibility'
@@ -656,6 +695,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'speckit_memory_token_report',
         arguments: {
+          project_path: workspaceRoot,
           projectRoot: workspaceRoot,
           feature: 'specs/feature-b',
           query: 'compatibility'
@@ -684,6 +724,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'speckit_memory_share_lesson',
         arguments: {
+          project_path: workspaceRoot,
           projectRoot: workspaceRoot,
           id: 'lesson-compat-002',
           title: 'Compatibility review',
@@ -714,6 +755,7 @@ describe('MCP Server Foundation', () => {
       params: {
         name: 'speckit_memory_sync_shared',
         arguments: {
+          project_path: workspaceRoot,
           projectRoot: workspaceRoot,
           framework: 'nest',
           language: 'typescript',
@@ -732,29 +774,5 @@ describe('MCP Server Foundation', () => {
     expect(syncPayload.reviewMarkdown).toContain('Delete this file after review or after merging its useful lessons.');
   });
 
-  it('rejects update_project_summary when write capability is disabled', async () => {
-    new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'mcp-tools-workspace');
-    const server = createMcpServer({ db, workspaceRoot });
 
-    const response = await server.handleRequest({
-      jsonrpc: '2.0',
-      id: 40,
-      method: 'tools/call',
-      params: {
-        name: 'update_project_summary',
-        arguments: {
-          projectName: 'mcp-tools-workspace',
-          purpose: 'Compact project summary for AI agents',
-          techStack: 'Node.js, TypeScript, better-sqlite3, Zod',
-          architectureStyle: 'Layered local MCP server',
-          importantConventions: 'Validate at the boundary and keep transport thin',
-          knownConstraints: 'No network egress; local SQLite only',
-          securitySensitiveAreas: 'MCP handlers, repository layer, path handling'
-        }
-      }
-    });
-
-    expect(response.error).toBeDefined();
-    expect(response.error?.message).toContain('Authorization error');
-  });
 });

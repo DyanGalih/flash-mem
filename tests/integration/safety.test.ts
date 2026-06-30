@@ -4,6 +4,7 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
+import { WorkspaceManager } from '../../src/mcp/WorkspaceManager';
 import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
@@ -50,7 +51,8 @@ describe('Safety and Secret Filtering Integration', () => {
 
       const projectRepo = new ProjectRepository(db);
       const project = projectRepo.upsertByRootPath(testWorkspace, 'safety-integration-workspace');
-      const server = createMcpServer({ db, workspaceRoot: testWorkspace });
+      const manager = new WorkspaceManager();
+      const server = createMcpServer({ manager });
 
       const response = await server.handleRequest({
         jsonrpc: '2.0',
@@ -59,7 +61,7 @@ describe('Safety and Secret Filtering Integration', () => {
         params: {
           name: 'memory_index',
           arguments: {
-            projectId: project.id,
+            project_path: testWorkspace,
             sources: [
               {
                 path: 'docs/credentials.md',
@@ -114,7 +116,8 @@ describe('Safety and Secret Filtering Integration', () => {
 
       const projectRepo = new ProjectRepository(db);
       projectRepo.upsertByRootPath(testWorkspace, 'safety-integration-workspace');
-      const server = createMcpServer({ db, workspaceRoot: testWorkspace });
+      const manager = new WorkspaceManager();
+      const server = createMcpServer({ manager });
 
       // Create a file with secret in the workspace
       const secretFile = path.join(testWorkspace, 'docs', 'secrets.md');
@@ -128,7 +131,7 @@ describe('Safety and Secret Filtering Integration', () => {
         params: {
           name: 'rebuild_index',
           arguments: {
-            workspaceRoot: testWorkspace
+            project_path: testWorkspace
           }
         }
       }) as any;

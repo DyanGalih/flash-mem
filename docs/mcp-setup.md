@@ -40,7 +40,6 @@ Claude Desktop usually targets one workspace at a time, so pass the workspace pa
         "/path/to/your/workspace"
       ],
       "env": {
-        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
       }
     }
   }
@@ -60,7 +59,6 @@ Use the global `flash-mem` command and let the extension provide the current wor
         "mcp"
       ],
       "env": {
-        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
       }
     }
   }
@@ -87,7 +85,6 @@ If you prefer to configure it manually, add the following to `~/.gemini/config/m
         "/absolute/path/to/your/workspace"
       ],
       "env": {
-        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
       }
     }
   }
@@ -119,7 +116,6 @@ Use the built CLI path and pass the workspace path explicitly.
         "/path/to/your/workspace"
       ],
       "env": {
-        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
       }
     }
   }
@@ -138,7 +134,6 @@ args = [
   "/absolute/path/to/flash-mem/dist/infrastructure/cli/index.js",
   "mcp"
 ]
-env = { FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES = "1" }
 enabled = true
 ```
 
@@ -163,7 +158,6 @@ If you prefer to configure it manually, add the following to `~/.gemini/config/m
         "/absolute/path/to/your/workspace"
       ],
       "env": {
-        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
       }
     }
   }
@@ -217,7 +211,6 @@ If your client expects a different project-local path, keep the file inside the 
         "mcp"
       ],
       "env": {
-        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
       }
     }
   }
@@ -244,5 +237,4 @@ This is the most explicit option and is useful when debugging path or environmen
 
 - For Claude Desktop, pass the workspace path explicitly unless your host app already manages workspace switching for you.
 - For IDE extensions, omit the workspace path when the extension already provides the current working directory.
-- Keep `FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES=1` set when you want the agent to update project summaries.
 - Treat each repository as its own workspace: run `flash-mem init .` in that repo and point the MCP server at that repo root, not at `~`, so summaries and memory entries stay project-scoped.

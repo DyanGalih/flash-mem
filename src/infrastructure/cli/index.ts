@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { Command } from 'commander';
 import * as fs from 'fs-extra';
 import * as path from 'path';
@@ -11,8 +10,7 @@ import {
   AGENT_INSTRUCTION_TARGETS,
   AgentInstructionTargetId,
   InitializeProjectService,
-  MCP_TARGETS,
-  McpTargetId
+
 } from '../../application/services/InitializeProjectService';
 import { MarkdownExportService } from '../../application/services/MarkdownExportService';
 import { MarkdownRestoreService } from '../../application/services/MarkdownRestoreService';
@@ -41,6 +39,7 @@ import { SqliteTransactionRunner } from '../../infrastructure/database/SqliteTra
 import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
 import { startMcpServer } from '../../mcp/server';
+import { WorkspaceManager } from '../../mcp/WorkspaceManager';
 import { resolveWorkspaceRootForAdd } from './workspace-root';
 
 // Preserve excess interactive input between sequential prompt groups.
@@ -341,83 +340,6 @@ async function promptForAgentInstructionTargets(targetDir: string): Promise<Agen
   }
 }
 
-async function promptForMcpTargets(targetDir: string): Promise<McpTargetId[]> {
-  if (!process.stdin.isTTY) {
-    throw new Error('Interactive mode requires a TTY terminal');
-  }
-
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stderr
-  });
-
-  const linesQueue: string[] = sharedInteractiveInputBuffer.splice(0);
-  let pendingResolve: ((value: string) => void) | null = null;
-
-  rl.on('line', (line) => {
-    const trimmed = line.trim();
-    if (pendingResolve) {
-      const resolve = pendingResolve;
-      pendingResolve = null;
-      resolve(trimmed);
-    } else {
-      linesQueue.push(trimmed);
-    }
-  });
-
-  const ask = (query: string): Promise<string> => {
-    process.stderr.write(query);
-    const nextLine = linesQueue.shift();
-    if (nextLine !== undefined) {
-      return Promise.resolve(nextLine);
-    }
-    return new Promise((resolve) => {
-      pendingResolve = resolve;
-    });
-  };
-
-  const selectionHelp = MCP_TARGETS
-    .map((target, index) => `${index + 1}. ${target.label} (${target.filePath})`)
-    .join('\n');
-
-  try {
-    while (true) {
-      const promptText = 'Enter numbers separated by commas, or press Enter for all: ';
-
-      const input = await ask([
-        '\nSelect MCP configuration files to create:',
-        selectionHelp,
-        promptText
-      ].join('\n'));
-
-      if (input.trim() === '') {
-        return MCP_TARGETS.map((target) => target.id);
-      }
-
-      const selectedIndexes = Array.from(new Set(
-        input
-          .split(',')
-          .map((token) => Number.parseInt(token.trim(), 10))
-          .filter((value) => Number.isInteger(value) && value >= 1 && value <= MCP_TARGETS.length)
-      ));
-
-      if (selectedIndexes.length === 0) {
-        process.stderr.write('Invalid selection. Try again.\n');
-        continue;
-      }
-
-      return selectedIndexes
-        .map((index) => MCP_TARGETS[index - 1])
-        .filter((target): target is (typeof MCP_TARGETS)[number] => Boolean(target))
-        .map((target) => target.id);
-    }
-  } finally {
-    if (linesQueue.length > 0) {
-      sharedInteractiveInputBuffer.push(...linesQueue);
-    }
-    rl.close();
-  }
-}
 
 function formatSearchTable(rows: Array<Record<string, string>>): string {
   if (rows.length === 0) {
@@ -525,16 +447,13 @@ program
       const targetDir = path.resolve(process.cwd(), dirArg);
 
       let promptTargetIds: AgentInstructionTargetId[] | undefined;
-      let mcpTargetIds: McpTargetId[] | undefined;
 
       if (options.all) {
         promptTargetIds = AGENT_INSTRUCTION_TARGETS.map(t => t.id);
-        mcpTargetIds = MCP_TARGETS.map(t => t.id);
       } else if (options.interactive || (process.stdin.isTTY && !useJson)) {
         promptTargetIds = await promptForAgentInstructionTargets(targetDir);
-        mcpTargetIds = await promptForMcpTargets(targetDir);
       }
-      const result = service.execute(targetDir, { promptTargetIds, mcpTargetIds, profile });
+      const result = service.execute(targetDir, { promptTargetIds, profile });
 
       if (useJson) {
         await writeStdout(JSON.stringify({
@@ -1210,16 +1129,10 @@ program
         initService.execute(workspaceRoot);
       }
 
-      const db = createDatabaseConnection(dbFile);
-      try {
-        await startMcpServer({
-          db,
-          workspaceRoot,
-          summaryWriteAccessEnabled: process.env.FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES === '1'
-        });
-      } finally {
-        db.close();
-      }
+      const manager = new WorkspaceManager();
+      await startMcpServer({
+        manager
+      });
     } catch (err: any) {
       const errMsg = err.message || 'Unknown error occurred while starting the MCP server';
       await writeStderr(`Error: ${errMsg}\n`);

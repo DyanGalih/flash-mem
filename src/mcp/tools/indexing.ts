@@ -1,8 +1,10 @@
 import { z } from 'zod';
 import { IndexingService } from '../../application/services/IndexingService';
+import { WorkspaceManager } from "../WorkspaceManager";
 
 export const indexingInputSchema = z.object({
-  projectId: z.string().min(1),
+    project_path: z.string().min(1).describe("Absolute path to the workspace root"),
+    projectId: z.string().min(1),
   sources: z.array(z.object({
     path: z.string().min(1),
     checksum: z.string().min(1),
@@ -13,11 +15,14 @@ export const indexingInputSchema = z.object({
   })).default([])
 });
 
-export function createIndexingTool(service: IndexingService) {
+export function createIndexingTool(manager: WorkspaceManager) {
   return {
     name: 'memory_index',
     description: 'Index source documents into project memory.',
     schema: indexingInputSchema,
-    execute: (input: z.infer<typeof indexingInputSchema>) => service.indexSources(input.projectId, input.sources)
+    execute: (input: z.infer<typeof indexingInputSchema>) => {
+      const service = manager.getBundle(input.project_path).indexingService;
+      return service.indexSources(input.projectId, input.sources);
+    }
   };
 }

@@ -3,7 +3,7 @@
 [![npm version](https://img.shields.io/npm/v/flash-mem.svg)](https://www.npmjs.com/package/flash-mem)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![smithery badge](https://smithery.ai/badge/flash-mem)](https://smithery.ai/server/flash-mem)
-[![Made with ❤️ in Indonesia](https://img.shields.io/badge/Made_with_%E2%9D%A4%EF%B8%8F_in-Indonesia-red.svg)](https://github.com/DyanGalih/flash-mem)
+[![Made with ❤️](https://img.shields.io/badge/Made_with_%E2%9D%A4%EF%B8%8F-blue.svg)](https://github.com/DyanGalih/flash-mem)
 
 **Give your AI coding assistant a permanent memory.**
 
@@ -15,8 +15,25 @@ Constantly reminding your AI about the same architectural rules? Tired of watchi
 
 `flash-mem` solves this by acting as a living knowledge base. It persistently stores your project's high-level summaries, core architectural decisions, coding conventions, and historical bug fixes. When your agent begins a new task, it dynamically retrieves the specific context it needs through the Model Context Protocol, ensuring it understands your codebase's unwritten rules before writing any code.
 
-**What changes?**
-In Session 1, you make an architectural decision to use `better-sqlite3` instead of an async driver. In Session 2, you ask the agent to add a new database repository. The agent automatically queries `flash-mem` via MCP, sees the previous architectural decision, and writes the correct synchronous code on the first try. No re-explaining. No copy-pasting. The agent just *knows*.
+**How it works (The Flow):**
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Agent as AI Agent
+    participant FlashMem as ⚡ flash-mem
+    
+    Note over User,FlashMem: Session 1
+    User->>Agent: "Let's use better-sqlite3 (sync)"
+    Agent->>FlashMem: Save architectural decision
+    
+    Note over User,FlashMem: Session 2 (Days Later)
+    User->>Agent: "Add a new database repository"
+    Agent->>FlashMem: Search past decisions via MCP
+    FlashMem-->>Agent: Returns "use better-sqlite3"
+    Agent-->>User: Writes correct sync code on the first try!
+```
+*No re-explaining. No copy-pasting. The agent just **knows**.*
 
 ## ✨ Why Use It?
 
@@ -56,11 +73,10 @@ flash-mem rebuild-index . --yes
 Important:
 
 - Run `flash-mem init .` inside each project root so each repository gets its own `.flash-mem` store.
-- `flash-mem init .` also scaffolds the project-local agent-instruction files and MCP config bundle for Cursor, Copilot, VS Code/Antigravity IDE, Cline, and Codex.
-- Launch the MCP server against that project root, not against your home directory, so memory stays workspace-scoped.
-- If you use Antigravity, keep one MCP server entry per project or use a workspace-local config. A single global Antigravity entry with a fixed `cwd` or workspace path will stay pinned to that project and will not automatically follow editor workspace switches.
-
-- After running `flash-mem init .` or changing the MCP configuration (for example via `flash-mem update`), reload your IDE so the MCP client picks up the new configuration. In VS Code / Antigravity this can be done by opening the command palette (Ctrl+P) and running "Reload Window", or by simply closing and re-opening the IDE.
+- `flash-mem init .` also scaffolds the project-local agent-instruction files and MCP config bundle.
+- The `flash-mem` MCP server is **stateless**. It can be configured once globally in your IDE (e.g. Antigravity, Cursor, Roo Code). You do **not** need to configure a separate MCP server per project.
+- Every MCP tool call now requires a `project_path` parameter. This allows the single global MCP server to seamlessly manage memory for multiple active projects simultaneously.
+- After running `flash-mem init .` or changing the global MCP configuration, reload your IDE if necessary so the MCP client picks up the new tools.
 
 ## 📦 Installation
 
@@ -91,24 +107,20 @@ npm link
 
 `flash-mem` is fully compatible with standard Model Context Protocol (MCP) clients, and MCP is the expected way for an agent to use the full flash-mem toolset. See [docs/mcp-setup.md](docs/mcp-setup.md) for grouped setup examples covering global installation, development checkouts, direct path execution, and IDE-specific configurations. The CLI remains available for manual, debugging, and legacy workflows, but agent-assisted usage should be wired through MCP first.
 
-Antigravity note:
+Antigravity and Global MCP note:
 
-- The Antigravity Editor MCP config is global, so if you point `flash-mem` at a fixed workspace in that config, it will always read and write that workspace's memory.
-- Antigravity CLI supports workspace-local MCP config, which is the safest way to keep memory scoped per repository.
-- If you switch between multiple projects in the editor, create one Antigravity MCP entry per repo or update the entry's `cwd`/path to match the active repo before using memory tools.
-- Do not assume the editor will auto-switch the MCP server to the currently open workspace.
+- Since all tools now require a `project_path`, you no longer need to create a separate MCP server configuration for each repository.
+- You can simply set up a single global MCP server in your IDE (e.g. Antigravity Editor, Cursor, Roo Code) and it will correctly route memory operations to the appropriate project based on the context.
 
-Recommended pattern:
+Recommended pattern (Global Configuration):
 
 ```json
 {
   "mcpServers": {
-    "flash-mem-my-repo": {
+    "flash-mem": {
       "command": "flash-mem",
       "args": ["mcp"],
-      "cwd": "/absolute/path/to/my-repo",
       "env": {
-        "FLASH_MEM_ENABLE_PROJECT_SUMMARY_WRITES": "1"
       }
     }
   }

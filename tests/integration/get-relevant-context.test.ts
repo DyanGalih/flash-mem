@@ -38,7 +38,8 @@ describe('get_relevant_context tool integration', () => {
       params: {
         name: 'add_memory',
         arguments: {
-          projectId: project.id,
+            project_path: workspaceRoot,
+            projectId: project.id,
           title: 'JWT Refresh Token Rotation Pattern',
           content: 'Rotate refresh tokens on each request to prevent reuse attacks.',
           category: 'pattern',
@@ -56,7 +57,8 @@ describe('get_relevant_context tool integration', () => {
       params: {
         name: 'add_memory',
         arguments: {
-          projectId: project.id,
+            project_path: workspaceRoot,
+            projectId: project.id,
           title: 'JWT Secret Rotation Decision',
           content: 'Use an asynchronous rotation runner for secrets.',
           category: 'decision',
@@ -76,7 +78,8 @@ describe('get_relevant_context tool integration', () => {
       params: {
         name: 'get_relevant_context',
         arguments: {
-          projectId: project.id,
+            project_path: workspaceRoot,
+            projectId: project.id,
           query: 'JWT'
         }
       }
@@ -125,7 +128,8 @@ describe('get_relevant_context tool integration', () => {
       params: {
         name: 'get_relevant_context',
         arguments: {
-          projectId: project.id,
+            project_path: workspaceRoot,
+            projectId: project.id,
           query: '   '
         }
       }
