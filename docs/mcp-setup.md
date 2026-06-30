@@ -12,11 +12,11 @@ When you run `flash-mem init .`, it also writes the versioned agent-instruction 
 
 ## At A Glance
 
-| Setup Type | Command | Workspace Argument | Best For |
-| --- | --- | --- | --- |
-| Global install | `flash-mem mcp` | Pass explicitly for Claude, omit for IDEs that manage the workspace | Everyday use after `npm install -g flash-mem` |
-| Development checkout | `node /path/to/flash-mem/dist/infrastructure/cli/index.js mcp` | Pass explicitly for Claude, omit for IDEs that manage the workspace | Active development and local testing |
-| Direct path | `node /absolute/path/to/flash-mem/dist/infrastructure/cli/index.js mcp` | Pass explicitly or omit depending on your host app | Debugging, automation, and explicit path control |
+| Setup Type | Command | Best For |
+| --- | --- | --- |
+| Global install | `flash-mem mcp` | Everyday use after `npm install -g flash-mem` |
+| Development checkout | `node /path/to/flash-mem/dist/infrastructure/cli/index.js mcp` | Active development and local testing |
+| Direct path | `node /absolute/path/to/flash-mem/dist/infrastructure/cli/index.js mcp` | Debugging, automation, and explicit path control |
 
 ## 1. Global Installation
 
@@ -28,16 +28,13 @@ npm install -g flash-mem
 
 ### Claude Desktop
 
-Claude Desktop usually targets one workspace at a time, so pass the workspace path explicitly.
-
 ```json
 {
   "mcpServers": {
     "flash-mem": {
       "command": "flash-mem",
       "args": [
-        "mcp",
-        "/path/to/your/workspace"
+        "mcp"
       ],
       "env": {
       }
@@ -81,8 +78,7 @@ If you prefer to configure it manually, add the following to `~/.gemini/config/m
     "flash-mem": {
       "command": "flash-mem",
       "args": [
-        "mcp",
-        "/absolute/path/to/your/workspace"
+        "mcp"
       ],
       "env": {
       }
@@ -103,7 +99,7 @@ npm run build
 
 ### Claude Desktop
 
-Use the built CLI path and pass the workspace path explicitly.
+Use the built CLI path.
 
 ```json
 {
@@ -112,8 +108,7 @@ Use the built CLI path and pass the workspace path explicitly.
       "command": "node",
       "args": [
         "/absolute/path/to/flash-mem/dist/infrastructure/cli/index.js",
-        "mcp",
-        "/path/to/your/workspace"
+        "mcp"
       ],
       "env": {
       }
@@ -154,8 +149,7 @@ If you prefer to configure it manually, add the following to `~/.gemini/config/m
       "command": "node",
       "args": [
         "/absolute/path/to/flash-mem/dist/infrastructure/cli/index.js",
-        "mcp",
-        "/absolute/path/to/your/workspace"
+        "mcp"
       ],
       "env": {
       }
@@ -222,7 +216,7 @@ If your client expects a different project-local path, keep the file inside the 
 Use this when you want to bypass the package manager and call the built CLI directly.
 
 ```bash
-node /absolute/path/to/flash-mem/dist/infrastructure/cli/index.js mcp /path/to/your/workspace
+node /absolute/path/to/flash-mem/dist/infrastructure/cli/index.js mcp
 ```
 
 This is the most explicit option and is useful when debugging path or environment issues.
@@ -235,6 +229,4 @@ This is the most explicit option and is useful when debugging path or environmen
 
 ## Important Notes
 
-- For Claude Desktop, pass the workspace path explicitly unless your host app already manages workspace switching for you.
-- For IDE extensions, omit the workspace path when the extension already provides the current working directory.
-- Treat each repository as its own workspace: run `flash-mem init .` in that repo and point the MCP server at that repo root, not at `~`, so summaries and memory entries stay project-scoped.
+- Treat each repository as its own workspace: run `flash-mem init .` in that repo so summaries and memory entries stay project-scoped.
