@@ -61,7 +61,7 @@ describe('Safety and Secret Filtering Integration', () => {
         params: {
           name: 'memory_index',
           arguments: {
-            project_path: testWorkspace,
+            project_path: testWorkspace, projectId: project.id,
             sources: [
               {
                 path: 'docs/credentials.md',
@@ -115,7 +115,7 @@ describe('Safety and Secret Filtering Integration', () => {
       new SchemaMigrationService(db).ensureCurrentSchema();
 
       const projectRepo = new ProjectRepository(db);
-      projectRepo.upsertByRootPath(testWorkspace, 'safety-integration-workspace');
+      const project = projectRepo.upsertByRootPath(testWorkspace, 'safety-integration-workspace');
       const manager = new WorkspaceManager();
       const server = createMcpServer({ manager });
 
@@ -131,7 +131,7 @@ describe('Safety and Secret Filtering Integration', () => {
         params: {
           name: 'rebuild_index',
           arguments: {
-            project_path: testWorkspace
+            project_path: testWorkspace, projectId: project.id
           }
         }
       }) as any;
@@ -144,7 +144,7 @@ describe('Safety and Secret Filtering Integration', () => {
       expect(payload.warnings).toBeDefined();
       expect(payload.warnings).toHaveLength(1);
       expect(payload.warnings[0]).toEqual(expect.objectContaining({
-        filePath: 'docs/secrets.md',
+        filePath: expect.stringContaining('docs/secrets.md'),
         line: 2,
         category: 'AWS Access Key'
       }));

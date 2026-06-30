@@ -1,3 +1,4 @@
+import { WorkspaceManager } from '../../src/mcp/WorkspaceManager';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'fs-extra';
 import * as path from 'path';
@@ -10,8 +11,8 @@ import { decodeToon } from '../../src/infrastructure/llm/toon';
 
 describe('get_relevant_context tool integration', () => {
   let db: any;
-  const testDbFile = path.resolve(__dirname, 'get-relevant-context-workspace', 'flashmem.sqlite');
-  const workspaceRoot = path.dirname(testDbFile);
+  const testDbFile = path.resolve(__dirname, 'get-relevant-context-workspace', '.flash-mem', 'flashmem.sqlite');
+  const workspaceRoot = path.dirname(path.dirname(testDbFile));
 
   beforeEach(() => {
     fs.removeSync(path.dirname(testDbFile));
@@ -28,7 +29,7 @@ describe('get_relevant_context tool integration', () => {
 
   it('registers the get_relevant_context tool and conforms to JSON-RPC scheme', async () => {
     const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'get-relevant-context-workspace');
-    const server = createMcpServer({ db, workspaceRoot });
+    const server = createMcpServer({ manager: new WorkspaceManager() });
 
     // Seed some test data via add_memory tool
     await server.handleRequest({
@@ -119,7 +120,7 @@ describe('get_relevant_context tool integration', () => {
 
   it('rejects empty and whitespace-only queries via JSON-RPC validation', async () => {
     const project = new ProjectRepository(db).upsertByRootPath(workspaceRoot, 'get-relevant-context-workspace');
-    const server = createMcpServer({ db, workspaceRoot });
+    const server = createMcpServer({ manager: new WorkspaceManager() });
 
     const response = await server.handleRequest({
       jsonrpc: '2.0',

@@ -13,8 +13,8 @@ import { WorkspaceManager } from '../../src/mcp/WorkspaceManager';
 describe('MCP Server Foundation', () => {
   let db: any;
   let previousGlobalDbPath: string | undefined;
-  const testDbFile = path.resolve(__dirname, 'mcp-tools-workspace', 'flashmem.sqlite');
-  const workspaceRoot = path.dirname(testDbFile);
+  const testDbFile = path.resolve(__dirname, 'mcp-tools-workspace', '.flash-mem', 'flashmem.sqlite');
+  const workspaceRoot = path.dirname(path.dirname(testDbFile));
 
   beforeEach(() => {
     fs.removeSync(path.dirname(testDbFile));
@@ -78,8 +78,7 @@ describe('MCP Server Foundation', () => {
       'token_report',
       'promote_shared_lesson',
       'sync_shared_lessons',
-      'generate_memory_synthesis',
-      'generate_doc_synthesis',
+      'speckit_memory_init_project',
       'speckit_memory_search',
       'speckit_memory_synthesize',
       'speckit_memory_token_report',
@@ -376,7 +375,7 @@ describe('MCP Server Foundation', () => {
       errorChunks.push(chunk.toString('utf8'));
     });
 
-    const serverPromise = startMcpServer({ db, workspaceRoot }, { input, output, error });
+    const serverPromise = startMcpServer({ manager: new WorkspaceManager() }, { input, output, error });
 
     input.write(`${JSON.stringify({
       jsonrpc: '2.0',
