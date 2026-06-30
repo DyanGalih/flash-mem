@@ -1,0 +1,9 @@
+project_profile:
+  language: typescript
+  framework: nest
+  shared_memory:
+    enabled: true
+    sync_channels:
+      - global
+      - typescript
+      - nest
