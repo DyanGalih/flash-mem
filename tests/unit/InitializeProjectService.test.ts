@@ -109,6 +109,9 @@ describe('InitializeProjectService Unit', () => {
     expect(result.updated).toContain(targetPath);
     const updatedContent = fs.readFileSync(targetPath, 'utf-8');
     expect(updatedContent).toContain('<!-- flash-mem-protocol-start v9 -->');
+    expect(updatedContent).toContain('## Pre-Flight Gate');
+    expect(updatedContent).toContain('you MUST call `get_project_summary` and `search_memory` first');
+    expect(updatedContent).toContain('if flash-mem is unavailable, note it explicitly and continue with local files');
     expect(updatedContent).toContain('Treat flash-mem as the source of truth for durable project memory.');
     expect(updatedContent).toContain('If flash-mem retrieval is empty or incomplete, inspect the markdown file and do not skip `capture_artifact_memory`; if it contains durable knowledge, capture it before treating it as current context.');
     expect(updatedContent).toContain('If `capture_artifact_memory` still returns nothing useful, keep the markdown file as the backup artifact.');
@@ -119,6 +122,46 @@ describe('InitializeProjectService Unit', () => {
     expect(updatedContent).toContain('## Do Not');
     expect(fs.readFileSync(targetPath, 'utf-8')).not.toContain('unversioned flash-mem block');
     expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
+  });
+
+  it('should upgrade v8 protocol block to v9 with Pre-Flight Gate', () => {
+    const targetPath = path.join(testWorkspace, '.agents/AGENTS.md');
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    // Write a v8 block (no Pre-Flight Gate)
+    fs.writeFileSync(
+      targetPath,
+      [
+        '# Custom project notes',
+        '',
+        '<!-- flash-mem-protocol-start v8 -->',
+        '# flash-mem',
+        '',
+        '## Goal',
+        'Keep durable project memory current and easy to retrieve.',
+        '',
+        '## Rules',
+        '- Search first: read `get_project_summary` and `search_memory` before planning.',
+        '',
+        '<!-- flash-mem-protocol-end -->',
+        '',
+        '# End of file'
+      ].join('\n')
+    );
+
+    service.writeAgentInstructions(testWorkspace, { existingOnly: true });
+
+    const content = fs.readFileSync(targetPath, 'utf-8');
+    // Version upgraded
+    expect(content).toContain('<!-- flash-mem-protocol-start v9 -->');
+    expect(content).not.toContain('<!-- flash-mem-protocol-start v8 -->');
+    // Pre-Flight Gate present
+    expect(content).toContain('## Pre-Flight Gate');
+    expect(content).toContain('Creating or updating an implementation plan');
+    expect(content).toContain('Writing, modifying, or deleting source code');
+    expect(content).toContain('Responding to debugging or incident questions');
+    // Surrounding content preserved
+    expect(content).toContain('# Custom project notes');
+    expect(content).toContain('# End of file');
   });
 
   it('should self-heal missing files but keep existing ones', () => {
@@ -149,6 +192,8 @@ describe('InitializeProjectService Unit', () => {
     const content = fs.readFileSync(antigravityPath, 'utf-8');
 
     expect(content).toContain('Treat flash-mem as the source of truth for durable project memory.');
+    expect(content).toContain('## Pre-Flight Gate');
+    expect(content).toContain('you MUST call `get_project_summary` and `search_memory` first');
     expect(content).toContain('If flash-mem retrieval is empty or incomplete, inspect the markdown file and do not skip `capture_artifact_memory`; if it contains durable knowledge, capture it before treating it as current context.');
     expect(content).toContain('## Forbidden Destructive Database Examples');
     expect(content).toContain('keep the markdown file as the backup artifact');
