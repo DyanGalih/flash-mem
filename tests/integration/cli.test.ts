@@ -14,7 +14,8 @@ import { TagRepository } from '../../src/infrastructure/database/repositories/Ta
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 
 vi.mock('readline', () => ({
-  createInterface: vi.fn()
+  createInterface: vi.fn(),
+  emitKeypressEvents: vi.fn()
 }));
 
 function execAsync(command: string, options: { cwd?: string; input?: string[]; tty?: boolean } = {}) {
@@ -165,6 +166,7 @@ describe('CLI Integration', () => {
 
     expect(fs.existsSync(path.join(testWorkspace, '.flash-mem'))).toBe(true);
     expect(fs.existsSync(path.join(testWorkspace, '.flash-mem/index.json'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, 'CLAUDE.md'))).toBe(true);
   });
 
   it('should initialize with --json option and output structured JSON', async () => {
@@ -234,6 +236,18 @@ describe('CLI Integration', () => {
     expect(aliasPayload.success).toBe(true);
   });
 
+  it('should preview selected agent files during interactive init', async () => {
+    const { stdout, stderr } = await execAsync(`node ${cliScript} init "${testWorkspace}"`, {
+      tty: true,
+      input: ['7', '']
+    });
+
+    expect(stdout).toContain('flash-mem initialized successfully at:');
+    expect(stderr).toContain('flash-mem init complete');
+    expect(stderr).toContain('Selected: 6 agent instruction files');
+    expect(fs.existsSync(path.join(testWorkspace, '.agents/AGENTS.md'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, 'CLAUDE.md'))).toBe(true);
+  });
   it.skip('should allow interactive init to create only the selected prompt files and MCP targets', async () => {
     const { stdout, stderr } = await execAsync(`node ${cliScript} init "${testWorkspace}" --interactive`, {
       tty: true,

@@ -1,9 +1,9 @@
 project_profile:
   language: typescript
-  framework: nest
+  framework: docusaurus
   shared_memory:
     enabled: true
     sync_channels:
       - global
       - typescript
-      - nest
+      - docusaurus

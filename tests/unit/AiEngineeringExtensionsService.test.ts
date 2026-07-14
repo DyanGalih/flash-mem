@@ -11,7 +11,7 @@ import { ProjectSummaryService } from '../../src/application/services/ProjectSum
 import { RelevantContextService } from '../../src/application/services/RelevantContextService';
 import { SchemaMigrationService } from '../../src/application/services/SchemaMigrationService';
 import { SharedLessonService } from '../../src/application/services/SharedLessonService';
-import { SpecKitCompatibilityService } from '../../src/application/services/SpecKitCompatibilityService';
+import { AiEngineeringExtensionsService } from '../../src/application/services/AiEngineeringExtensionsService';
 import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 import { IndexingRunRepository } from '../../src/infrastructure/database/repositories/IndexingRunRepository';
 import { MemoryEntryRepository } from '../../src/infrastructure/database/repositories/MemoryEntryRepository';
@@ -23,9 +23,9 @@ import { SourceDocumentRepository } from '../../src/infrastructure/database/repo
 import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 
-describe('SpecKitCompatibilityService', () => {
+describe('AiEngineeringExtensionsService', () => {
   let db: any;
-  const testDbFile = path.resolve(__dirname, 'speckit-compatibility-workspace', 'flashmem.sqlite');
+  const testDbFile = path.resolve(__dirname, 'ai-engineering-compatibility-workspace', 'flashmem.sqlite');
   const workspaceRoot = path.dirname(testDbFile);
 
   beforeEach(() => {
@@ -44,7 +44,7 @@ describe('SpecKitCompatibilityService', () => {
 
   it('prepares memory and doc context and writes reviewable artifacts', () => {
     const projectRepo = new ProjectRepository(db);
-    const project = projectRepo.upsertByRootPath(workspaceRoot, 'speckit-compatibility-workspace');
+    const project = projectRepo.upsertByRootPath(workspaceRoot, 'ai-engineering-compatibility-workspace');
     const memoryEntryRepo = new MemoryEntryRepository(db);
     const tagRepo = new TagRepository(db);
     const relationshipRepo = new RelationshipRepository(db);
@@ -76,7 +76,7 @@ describe('SpecKitCompatibilityService', () => {
     const artifactIngestionService = new MarkdownArtifactIngestionService(projectRepo, indexingService);
 
     summaryService.updateProjectSummary({
-      projectName: 'speckit-compatibility-workspace',
+      projectName: 'ai-engineering-compatibility-workspace',
       purpose: 'Local-first memory synthesis for SDD',
       techStack: 'TypeScript, SQLite, MCP',
       architectureStyle: 'Layered local-first architecture',
@@ -107,7 +107,7 @@ describe('SpecKitCompatibilityService', () => {
       'utf-8'
     );
 
-    const service = new SpecKitCompatibilityService(
+    const service = new AiEngineeringExtensionsService(
       new MemorySynthesisService(projectRepo, summaryService, contextService),
       new DocSynthesisService(),
       new SharedLessonService(sharedLessonRepo),
@@ -154,7 +154,7 @@ describe('SpecKitCompatibilityService', () => {
 
   it('stores synthesized context directly in flash-mem when requested', () => {
     const projectRepo = new ProjectRepository(db);
-    const project = projectRepo.upsertByRootPath(workspaceRoot, 'speckit-compatibility-workspace');
+    const project = projectRepo.upsertByRootPath(workspaceRoot, 'ai-engineering-compatibility-workspace');
     const memoryEntryRepo = new MemoryEntryRepository(db);
     const tagRepo = new TagRepository(db);
     const relationshipRepo = new RelationshipRepository(db);
@@ -186,7 +186,7 @@ describe('SpecKitCompatibilityService', () => {
     const artifactIngestionService = new MarkdownArtifactIngestionService(projectRepo, indexingService);
 
     summaryService.updateProjectSummary({
-      projectName: 'speckit-compatibility-workspace',
+      projectName: 'ai-engineering-compatibility-workspace',
       purpose: 'Local-first memory synthesis for SDD',
       techStack: 'TypeScript, SQLite, MCP',
       architectureStyle: 'Layered local-first architecture',
@@ -202,7 +202,7 @@ describe('SpecKitCompatibilityService', () => {
       'utf-8'
     );
 
-    const service = new SpecKitCompatibilityService(
+    const service = new AiEngineeringExtensionsService(
       new MemorySynthesisService(projectRepo, summaryService, contextService),
       new DocSynthesisService(),
       new SharedLessonService(sharedLessonRepo),
@@ -306,7 +306,7 @@ describe('SpecKitCompatibilityService', () => {
 
   it('shares reference lessons through the compatibility schema and persists them', async () => {
     const sharedLessonRepo = new SharedLessonRepository(db);
-    const service = new SpecKitCompatibilityService(
+    const service = new AiEngineeringExtensionsService(
       new MemorySynthesisService(),
       new DocSynthesisService(),
       new SharedLessonService(sharedLessonRepo)
@@ -346,7 +346,7 @@ describe('SpecKitCompatibilityService', () => {
 
   it('initializes project profiles for compatibility workflows', async () => {
     const sharedLessonRepo = new SharedLessonRepository(db);
-    const service = new SpecKitCompatibilityService(
+    const service = new AiEngineeringExtensionsService(
       new MemorySynthesisService(),
       new DocSynthesisService(),
       new SharedLessonService(sharedLessonRepo)
@@ -387,7 +387,7 @@ describe('SpecKitCompatibilityService', () => {
 
   it('rejects blank required compatibility fields before writing artifacts', async () => {
     const sharedLessonRepo = new SharedLessonRepository(db);
-    const service = new SpecKitCompatibilityService(
+    const service = new AiEngineeringExtensionsService(
       new MemorySynthesisService(),
       new DocSynthesisService(),
       new SharedLessonService(sharedLessonRepo)

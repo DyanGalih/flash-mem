@@ -68,7 +68,7 @@ export interface InitializeProjectCompatibilityResult {
   profileStatus: 'created' | 'updated';
 }
 
-export class SpecKitCompatibilityService {
+export class AiEngineeringExtensionsService {
   constructor(
     private readonly memorySynthesisService: MemorySynthesisService,
     private readonly docSynthesisService: DocSynthesisService,

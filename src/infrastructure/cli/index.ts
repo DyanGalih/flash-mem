@@ -22,7 +22,7 @@ import { ProjectSummaryService } from '../../application/services/ProjectSummary
 import { RelevantContextService } from '../../application/services/RelevantContextService';
 import { SchemaMigrationService } from '../../application/services/SchemaMigrationService';
 import { SharedLessonService } from '../../application/services/SharedLessonService';
-import { SpecKitCompatibilityService } from '../../application/services/SpecKitCompatibilityService';
+import { AiEngineeringExtensionsService } from '../../application/services/AiEngineeringExtensionsService';
 import { TokenBudgetService } from '../../application/services/TokenBudgetService';
 import { VALID_CATEGORIES } from '../../domain/entities/MemoryEntry';
 import { DetachedMarkdownExportLauncher } from '../../infrastructure/background/DetachedMarkdownExportLauncher';
@@ -117,7 +117,7 @@ function parseConfidence(value: unknown): number | undefined {
 interface WorkspaceCompatibilityBundle {
   db: ReturnType<typeof createDatabaseConnection>;
   project: ReturnType<ProjectRepository['upsertByRootPath']>;
-  compatibilityService: SpecKitCompatibilityService;
+  compatibilityService: AiEngineeringExtensionsService;
   indexingService: IndexingService;
   markdownArtifactIngestionService: MarkdownArtifactIngestionService;
   memorySynthesisService: MemorySynthesisService;
@@ -230,7 +230,7 @@ function createWorkspaceCompatibilityBundle(workspaceRoot: string): WorkspaceCom
 
   const sharedLessonService = new SharedLessonService(sharedLessonRepository, globalSharedLessonRepository);
   const markdownArtifactIngestionService = new MarkdownArtifactIngestionService(projectRepo, indexingService);
-  const compatibilityService = new SpecKitCompatibilityService(
+  const compatibilityService = new AiEngineeringExtensionsService(
     memorySynthesisService,
     docSynthesisService,
     sharedLessonService,
@@ -264,84 +264,232 @@ async function promptForAgentInstructionTargets(targetDir: string): Promise<Agen
 
   const service = new InitializeProjectService();
   const targets = service.getAgentInstructionTargets(targetDir);
-  const detectedIds = targets.filter(t => t.exists).map(t => t.id);
+  const detectedIds = targets.filter((target) => target.exists).map((target) => target.id);
+  const defaultSelection = new Set<AgentInstructionTargetId>(
+    detectedIds.length > 0 ? detectedIds : AGENT_INSTRUCTION_TARGETS.map((target) => target.id)
+  );
+  const selectedIds = new Set<AgentInstructionTargetId>(defaultSelection);
+  let focusedIndex = Math.max(0, targets.findIndex((target) => selectedIds.has(target.id)));
+  if (focusedIndex < 0) {
+    focusedIndex = 0;
+  }
+
+  const stdin = process.stdin;
+  const supportsRawMode = typeof stdin.setRawMode === "function";
+  const originalRawMode = typeof stdin.isRaw === "boolean" ? stdin.isRaw : undefined;
+  let settled = false;
 
   const rl = readline.createInterface({
-    input: process.stdin,
+    input: stdin,
     output: process.stderr
   });
 
-  const linesQueue: string[] = sharedInteractiveInputBuffer.splice(0);
-  let pendingResolve: ((value: string) => void) | null = null;
+  const useColors = process.stderr.isTTY === true;
+  const paint = (text: string, open: string, close = '0') => useColors ? `\u001b[${open}m${text}\u001b[${close}m` : text;
+  const bold = (text: string) => paint(text, '1');
+  const dim = (text: string) => paint(text, '2');
+  const cyan = (text: string) => paint(text, '36');
+  const green = (text: string) => paint(text, '32');
+  const yellow = (text: string) => paint(text, '33');
 
-  rl.on('line', (line) => {
-    const trimmed = line.trim();
-    if (pendingResolve) {
-      const resolve = pendingResolve;
-      pendingResolve = null;
-      resolve(trimmed);
-    } else {
-      linesQueue.push(trimmed);
-    }
-  });
+  const getSelectedTargets = () => targets.filter((target) => selectedIds.has(target.id));
 
-  const ask = (query: string): Promise<string> => {
-    process.stderr.write(query);
-    const nextLine = linesQueue.shift();
-    if (nextLine !== undefined) {
-      return Promise.resolve(nextLine);
-    }
-    return new Promise((resolve) => {
-      pendingResolve = resolve;
-    });
-  };
+  const renderSelectionPreview = () => [
+    bold(cyan('flash-mem init')),
+    dim('Select agent instruction files'),
+    '',
+    ...targets.map((target, index) => {
+      const cursor = index === focusedIndex ? cyan('▶') : ' ';
+      const checked = selectedIds.has(target.id) ? green('x') : dim(' ');
+      const body = '[' + checked + '] ' + target.label + ' (' + target.filePath + ')';
+      return cursor + ' ' + (index === focusedIndex ? bold(body) : body) + (target.exists ? dim(' (Detected)') : '');
+    })
+  ].join("\n");
 
-  const selectionHelp = targets
-    .map((target, index) => `${index + 1}. ${target.label} (${target.filePath})${target.exists ? ' (Detected)' : ''}`)
-    .join('\n');
+  const renderSelectedSummary = () => [
+    bold(cyan('flash-mem init complete')),
+    dim('Selected: ' + String(getSelectedTargets().length) + ' agent instruction file' + (getSelectedTargets().length === 1 ? '' : 's')),
+    ''
+  ].join("\n");
 
-  try {
-    while (true) {
-      const promptText = detectedIds.length > 0
-        ? 'Enter numbers separated by commas, or press Enter to update detected agents: '
-        : 'Enter numbers separated by commas, or press Enter for all: ';
-
-      const input = await ask([
-        'Select agent instruction files to create:',
-        selectionHelp,
-        promptText
-      ].join('\n'));
-
-      if (input.trim() === '') {
-        return detectedIds.length > 0 ? detectedIds : AGENT_INSTRUCTION_TARGETS.map((target) => target.id);
+  const restoreTerminal = () => {
+    if (supportsRawMode) {
+      try {
+        stdin.setRawMode(originalRawMode ?? false);
+      } catch {
+        // Ignore cleanup errors when the input stream does not support toggling raw mode anymore.
       }
-
-      const selectedIndexes = Array.from(new Set(
-        input
-          .split(',')
-          .map((token) => Number.parseInt(token.trim(), 10))
-          .filter((value) => Number.isInteger(value) && value >= 1 && value <= AGENT_INSTRUCTION_TARGETS.length)
-      ));
-
-      if (selectedIndexes.length === 0) {
-        process.stderr.write('Invalid selection. Try again.\n');
-        continue;
-      }
-
-      return selectedIndexes
-        .map((index) => AGENT_INSTRUCTION_TARGETS[index - 1])
-        .filter((target): target is (typeof AGENT_INSTRUCTION_TARGETS)[number] => Boolean(target))
-        .map((target) => target.id);
-    }
-  } finally {
-    if (linesQueue.length > 0) {
-      sharedInteractiveInputBuffer.push(...linesQueue);
     }
     rl.close();
+    stdin.pause();
+    stdin.removeListener("keypress", onKeypress);
+  };
+
+  const finish = (resolve: (value: AgentInstructionTargetId[]) => void) => {
+    settled = true;
+    restoreTerminal();
+    console.error(renderSelectedSummary());
+    resolve(getSelectedTargets().map((target) => target.id));
+  };
+
+  const rerender = () => {
+    console.error("\u001b[2J\u001b[H" + renderSelectionPreview());
+  };
+
+  const toggleTargetAt = (index: number) => {
+    const target = targets[index];
+    if (!target) {
+      return;
+    }
+
+    if (selectedIds.has(target.id)) {
+      selectedIds.delete(target.id);
+    } else {
+      selectedIds.add(target.id);
+    }
+  };
+
+  const toggleFocusedTarget = () => {
+    toggleTargetAt(focusedIndex);
+  };
+
+  const selectAll = () => {
+    selectedIds.clear();
+    for (const target of targets) {
+      selectedIds.add(target.id);
+    }
+  };
+
+  const selectNone = () => {
+    selectedIds.clear();
+  };
+
+  const moveFocus = (delta: number) => {
+    const nextIndex = (focusedIndex + delta + targets.length) % targets.length;
+    focusedIndex = nextIndex;
+  };
+
+  const processLineInput = (line: string) => {
+    const trimmed = line.trim();
+    if (trimmed === '') {
+      if (selectedIds.size === 0) {
+        console.error('At least one agent instruction file must be selected.');
+        rerender();
+        return;
+      }
+
+      finish(resolvePrompt);
+      return;
+    }
+
+    if (trimmed === 'a') {
+      selectAll();
+      rerender();
+      return;
+    }
+
+    if (trimmed === 'n') {
+      selectNone();
+      rerender();
+      return;
+    }
+
+    const selectedIndexes = Array.from(new Set(
+      trimmed
+        .split(',')
+        .map((token) => Number.parseInt(token.trim(), 10))
+        .filter((value) => Number.isInteger(value) && value >= 1 && value <= targets.length)
+    ));
+
+    if (selectedIndexes.length === 0) {
+      console.error(yellow('Invalid selection. Try again.'));
+      rerender();
+      return;
+    }
+
+    for (const index of selectedIndexes) {
+      toggleTargetAt(index - 1);
+    }
+
+    rerender();
+  };
+
+  rl.on('line', processLineInput);
+
+  let rejectPrompt!: (reason?: unknown) => void;
+
+  const onKeypress = (_str: string, key: readline.Key) => {
+    if (settled) {
+      return;
+    }
+
+    if (key.ctrl && key.name === 'c') {
+      settled = true;
+      restoreTerminal();
+      rejectPrompt(new Error('Initialization cancelled'));
+      return;
+    }
+
+    switch (key.name) {
+      case 'up':
+      case 'k':
+        moveFocus(-1);
+        rerender();
+        break;
+      case 'down':
+      case 'j':
+        moveFocus(1);
+        rerender();
+        break;
+      case 'space':
+        toggleFocusedTarget();
+        rerender();
+        break;
+      case 'a':
+        selectAll();
+        rerender();
+        break;
+      case 'n':
+        selectNone();
+        rerender();
+        break;
+      case 'return':
+      case 'enter':
+        if (selectedIds.size === 0) {
+          console.error(yellow('At least one agent instruction file must be selected.'));
+          rerender();
+          return;
+        }
+
+        finish(resolvePrompt);
+        break;
+      default:
+        break;
+    }
+  };
+
+  let resolvePrompt!: (value: AgentInstructionTargetId[]) => void;
+  const prompt = new Promise<AgentInstructionTargetId[]>((resolve, reject) => {
+    resolvePrompt = resolve;
+    rejectPrompt = reject;
+
+    readline.emitKeypressEvents(stdin);
+    if (supportsRawMode) {
+      stdin.setRawMode(true);
+    }
+    stdin.resume();
+    stdin.on("keypress", onKeypress);
+    rerender();
+  });
+
+  try {
+    return await prompt;
+  } finally {
+    if (!settled) {
+      restoreTerminal();
+    }
   }
 }
-
-
 function formatSearchTable(rows: Array<Record<string, string>>): string {
   if (rows.length === 0) {
     return '';

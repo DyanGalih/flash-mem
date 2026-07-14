@@ -10,15 +10,11 @@ import { MarkdownArtifactIngestionService } from '../application/services/Markdo
 import { MarkdownExportService } from '../application/services/MarkdownExportService';
 import { MarkdownRestoreService } from '../application/services/MarkdownRestoreService';
 import { MemoryEntryService } from '../application/services/MemoryEntryService';
-import { MemorySearchService } from '../application/services/MemorySearchService';
 import { MemorySynthesisService } from '../application/services/MemorySynthesisService';
 import { ProjectSummaryService } from '../application/services/ProjectSummaryService';
 import { RelevantContextService } from '../application/services/RelevantContextService';
 import { SchemaMigrationService } from '../application/services/SchemaMigrationService';
 import { SharedLessonService } from '../application/services/SharedLessonService';
-import { SpecKitCompatibilityService } from '../application/services/SpecKitCompatibilityService';
-import { TokenBudgetService } from '../application/services/TokenBudgetService';
-import { WorkspaceIndexingService } from '../application/services/WorkspaceIndexingService';
 import { DetachedMarkdownExportLauncher } from '../infrastructure/background/DetachedMarkdownExportLauncher';
 import { getGlobalHubDatabase } from '../infrastructure/database/global';
 import { IndexingRunRepository } from '../infrastructure/database/repositories/IndexingRunRepository';
@@ -51,15 +47,10 @@ import {
   createMemorySynthesisTool,
   createPrepareContextTool,
   createPromoteSharedLessonTool,
-  createSpeckitMemoryInitProjectTool,
-  createSpeckitMemorySearchTool,
-  createSpeckitMemoryShareLessonTool,
-  createSpeckitMemorySyncSharedTool,
-  createSpeckitMemorySynthesizeTool,
-  createSpeckitMemoryTokenReportTool,
+  createInitProjectTool,
   createSyncSharedLessonsTool,
   createTokenReportTool
-} from './tools/SpecKitTools';
+} from './tools/AiEngineeringExtensionsTools';
 import { createUpdateMemoryTool } from './tools/update-memory';
 import { createUpdateProjectSummaryTool } from './tools/update-project-summary';
 
@@ -74,13 +65,6 @@ type McpToolDefinition = {
   execute: (input: any) => unknown;
   responseFormat?: McpToolResponseFormat;
 };
-
-function createToolAlias<T extends McpToolDefinition>(tool: T, name: string): T {
-  return {
-    ...tool,
-    name
-  };
-}
 
 function withFormattedResponse<T extends McpToolDefinition>(tool: T): T {
   return {
@@ -117,12 +101,7 @@ export function createMcpServer(context: McpServerContext) {
       const tokenReportTool = withFormattedResponse(createTokenReportTool(manager));
       const promoteSharedLessonTool = withFormattedResponse(createPromoteSharedLessonTool(manager));
       const syncSharedLessonsTool = withFormattedResponse(createSyncSharedLessonsTool(manager));
-      const initializeProjectTool = withFormattedResponse(createSpeckitMemoryInitProjectTool(manager));
-      const speckitMemorySearchTool = withFormattedResponse(createSpeckitMemorySearchTool(manager));
-      const speckitMemorySynthesizeTool = withFormattedResponse(createSpeckitMemorySynthesizeTool(manager));
-      const speckitMemoryTokenReportTool = withFormattedResponse(createSpeckitMemoryTokenReportTool(manager));
-      const speckitMemoryShareLessonTool = withFormattedResponse(createSpeckitMemoryShareLessonTool(manager));
-      const speckitMemorySyncSharedTool = withFormattedResponse(createSpeckitMemorySyncSharedTool(manager));
+      const initializeProjectTool = withFormattedResponse(createInitProjectTool(manager));
 
       server
         .registerTool(getProjectSummaryTool)
@@ -135,12 +114,6 @@ export function createMcpServer(context: McpServerContext) {
         .registerTool(captureArtifactMemoryTool)
         .registerTool(exportMarkdownTool)
         .registerTool(rebuildIndexTool)
-        .registerTool(createToolAlias(getProjectSummaryTool, 'memory_project_summary_get'))
-        .registerTool(createToolAlias(updateProjectSummaryTool, 'memory_project_summary_update'))
-        .registerTool(createToolAlias(searchMemoryTool, 'memory_search'))
-        .registerTool(createToolAlias(addMemoryTool, 'memory_entry_create'))
-        .registerTool(createToolAlias(updateMemoryTool, 'memory_entry_update'))
-        .registerTool(createToolAlias(addMemoryRelationshipTool, 'memory_relationship_create'))
         .registerTool(addMemoryRelationshipTool)
         .registerTool(indexingTool)
         .registerTool(restoreBackupTool)
@@ -150,12 +123,7 @@ export function createMcpServer(context: McpServerContext) {
         .registerTool(tokenReportTool)
         .registerTool(promoteSharedLessonTool)
         .registerTool(syncSharedLessonsTool)
-        .registerTool(initializeProjectTool)
-        .registerTool(speckitMemorySearchTool)
-        .registerTool(speckitMemorySynthesizeTool)
-        .registerTool(speckitMemoryTokenReportTool)
-        .registerTool(speckitMemoryShareLessonTool)
-        .registerTool(speckitMemorySyncSharedTool);
+        .registerTool(initializeProjectTool);
 
       return server;
 }

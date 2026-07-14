@@ -7,7 +7,7 @@
 
 **Give your AI coding assistant a permanent memory.**
 
-`flash-mem` is an MCP (Model Context Protocol) server and CLI tool designed to provide durable engineering memory for any MCP-compatible AI agent, such as Claude Code, Cursor, Windsurf, and Roo Code. For agent-assisted use, MCP is the primary integration path: connect the workspace first so the agent can read project memory before it starts making changes.
+`flash-mem` is an MCP (Model Context Protocol) server and CLI tool designed to provide durable engineering memory for any MCP-compatible AI agent, such as Claude Code, Cursor, Windsurf, and other MCP-compatible agents. For agent-assisted use, MCP is the primary integration path: connect the workspace first so the agent can read project memory before it starts making changes.
 
 The retrieval-first workflow is intentionally token-conscious: summary and search tools are designed to return compact context so the agent can reuse durable knowledge without pulling unnecessary history into the prompt.
 
@@ -46,7 +46,7 @@ It is designed to help engineers and AI agents:
 - keep retrieval-first workflows before code changes
 - preserve context for agent-assisted development and SDD
 
-If you are using AI for **vibe coding**, **spec-driven development** (like using **Spec-Kit**), or as a pair-programming partner, `flash-mem` helps keep the model grounded in your actual codebase instead of guessing from scratch every session.
+If you are using AI for **vibe coding**, **AI engineering workflows** (including spec-driven development like using **Spec-Kit**), or as a pair-programming partner, `flash-mem` helps keep the model grounded in your actual codebase instead of guessing from scratch every session.
 
 Recent updates also expanded the MCP surface with compact response formatting and compatibility helpers, which makes memory retrieval cheaper to read and easier to reuse in longer sessions.
 
@@ -57,6 +57,8 @@ For setup, workflow, and migration details, see the linked docs.
 For a reusable review prompt to check whether flash-mem was used in a task, see [flash-mem Review Prompt](docs/flash-mem-review-prompt.md).
 
 For lightweight release notes, see [Release Notes](docs/releases.md).
+
+For the AI Engineering Extensions tool surface and workflow notes, see [AI Engineering Extensions](docs/ai-engineering-extensions.md).
 
 ## 🚀 Quick Start
 
@@ -73,8 +75,8 @@ flash-mem rebuild-index . --yes
 Important:
 
 - Run `flash-mem init .` inside each project root so each repository gets its own `.flash-mem` store.
-- `flash-mem init .` also scaffolds the project-local agent-instruction files and MCP config bundle.
-- The `flash-mem` MCP server is **stateless**. It can be configured once globally in your IDE (e.g. Antigravity, Cursor, Roo Code). You do **not** need to configure a separate MCP server per project.
+- `flash-mem init .` also scaffolds the project-local agent-instruction files.
+- The `flash-mem` MCP server is **stateless**. It can be configured once globally in your IDE (e.g. Antigravity and Cursor). You do **not** need to configure a separate MCP server per project.
 - Every MCP tool call now requires a `project_path` parameter. This allows the single global MCP server to seamlessly manage memory for multiple active projects simultaneously.
 - After running `flash-mem init .` or changing the global MCP configuration, reload your IDE if necessary so the MCP client picks up the new tools.
 
@@ -107,10 +109,10 @@ npm link
 
 `flash-mem` is fully compatible with standard Model Context Protocol (MCP) clients, and MCP is the expected way for an agent to use the full flash-mem toolset. See [docs/mcp-setup.md](docs/mcp-setup.md) for grouped setup examples covering global installation, development checkouts, direct path execution, and IDE-specific configurations. The CLI remains available for manual, debugging, and legacy workflows, but agent-assisted usage should be wired through MCP first.
 
-Antigravity and Global MCP note:
+MCP note:
 
 - Since all tools now require a `project_path`, you no longer need to create a separate MCP server configuration for each repository.
-- You can simply set up a single global MCP server in your IDE (e.g. Antigravity Editor, Cursor, Roo Code) and it will correctly route memory operations to the appropriate project based on the context.
+- You can simply set up a single global MCP server in your IDE (for example, Antigravity Editor or Cursor) and it will correctly route memory operations to the appropriate project based on the context.
 
 Recommended pattern (Global Configuration):
 
@@ -127,7 +129,7 @@ Recommended pattern (Global Configuration):
 }
 ```
 
-For the CLI, put the equivalent config in `.agents/mcp_config.json` inside each repository and set `cwd` to `.` if you want the server to follow that repo automatically.
+See [docs/mcp-setup.md](docs/mcp-setup.md) for the client-specific MCP config location and filename. VS Code uses `.vscode/mcp.json` with `servers`, `type`, and `tools`, while Claude Desktop and Antigravity use the `mcpServers` shape below. Claude Desktop does not have a separate global path documented in this repository; use its client-managed config location. If you need the exact file path, use the one shown by Claude Desktop for your OS or in the Claude docs. The repository-local Codex template lives in `.codex/config.toml`, and the active Codex config is `~/.codex/config.toml`.
 
 ## 📄 License
 

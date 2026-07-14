@@ -9,7 +9,7 @@
 
 ### 1. Initialize Workspace
 
-Initialize a new `.flash-mem` workspace in the target directory (defaults to current directory) and scaffold the versioned agent-instruction files plus the local MCP config bundle for the supported editors and clients.
+Initialize a new `.flash-mem` workspace in the target directory (defaults to current directory) and scaffold the versioned agent-instruction files for the supported editors and clients, including `CLAUDE.md` for Claude Code.
 
 ```bash
 flash-mem init [path] [options]
@@ -151,7 +151,7 @@ flash-mem prepare-context [path] [options]
 
 ---
 
-### 7. Spec Kit-Compatible Helpers
+### 7. AI Engineering Extensions
 
 These commands are additive and opt-in:
 

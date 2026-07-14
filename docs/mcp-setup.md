@@ -1,14 +1,15 @@
 # MCP Setup Guide
 
-`flash-mem` can be run in three common ways:
+`flash-mem` is usually configured in two layers:
 
-- as a globally installed command
-- from a local development checkout
-- from a direct absolute path to the built CLI
+- one-time MCP server setup in the client or global config you use on that machine
+- per-repository workspace bootstrap with `flash-mem init .`
 
-The MCP configuration format changes slightly depending on whether you are using a desktop app like Claude or an IDE extension like VS Code, Antigravity, Cline, Roo Code, or Codex.
+Set up the MCP server once. After that, every new project only needs `flash-mem init .` to create the workspace-scoped memory files and prompt surfaces.
 
-When you run `flash-mem init .`, it also writes the versioned agent-instruction files (`AGENTS.md`, `ANTIGRAVITY.md`, `.cursor/rules/flash-mem.mdc`, `CLINE.md`, and `.github/copilot-instructions.md`) so the same memory-first protocol is available in prompt surfaces, not just MCP configs.
+`flash-mem init .` writes the versioned agent-instruction files (`AGENTS.md`, `ANTIGRAVITY.md`, `CLAUDE.md`, `.cursor/rules/flash-mem.mdc`, and `.github/copilot-instructions.md`) so the same memory-first protocol is available in prompt surfaces. Interactive init supports multi-select, so you can create more than one agent file in a single run.
+
+The JSON and TOML blocks below are the MCP server definitions themselves, not a universal file path. Each client decides where to store that definition, so the location and filename vary by IDE or agent.
 
 ## At A Glance
 
@@ -18,9 +19,23 @@ When you run `flash-mem init .`, it also writes the versioned agent-instruction 
 | Development checkout | `node /path/to/flash-mem/dist/infrastructure/cli/index.js mcp` | Active development and local testing |
 | Direct path | `node /absolute/path/to/flash-mem/dist/infrastructure/cli/index.js mcp` | Debugging, automation, and explicit path control |
 
+## Where To Store It
+
+Use the same server entry in the client-specific config location for your tool. There is no single universal MCP filename across all IDEs and agents.
+
+| Client | Where to store it | File name / notes |
+| --- | --- | --- |
+| Codex | `~/.codex/config.toml` | The repo-local `.codex/config.toml` is a template you can copy or symlink there. |
+| Antigravity CLI | `~/.gemini/config/mcp_config.json` | Centralized global config on the machine. |
+| Claude Desktop | Client MCP settings or config file | No separate global path is documented here; use Claude's client-managed config location with the standard `mcpServers` JSON shape. |
+| Cursor | Client MCP settings or config file | The storage location is client-managed and may vary by version. |
+| VS Code extensions | `.vscode/mcp.json` | Uses `servers` in the VS Code MCP file, not `mcpServers`; the exact file is editor-managed. |
+
+If the client supports a repo-local helper file, that file is just a convenience copy of the same server definition. The repository itself does not impose a single universal MCP filename.
+
 ## 1. Global Installation
 
-Use this when you have installed `flash-mem` globally and want MCP to call the `flash-mem` command directly.
+Use this when you have installed `flash-mem` globally and want to point your MCP client at the `flash-mem` command once for the machine or user account.
 
 ```bash
 npm install -g flash-mem
@@ -28,6 +43,8 @@ npm install -g flash-mem
 
 ### Claude Desktop
 
+Claude Desktop uses its client-managed config location. This guide does not assume a separate global path for it; use the standard `mcpServers` shape there. If you need the exact file path, use the one shown by Claude Desktop for your OS or in the Claude docs.
+
 ```json
 {
   "mcpServers": {
@@ -37,7 +54,11 @@ npm install -g flash-mem
         "mcp"
       ],
       "env": {
-      }
+      },
+      "type": "local",
+      "tools": [
+        "*"
+      ]
     }
   }
 }
@@ -45,18 +66,22 @@ npm install -g flash-mem
 
 ### VS Code Extensions
 
-Use the global `flash-mem` command and let the extension provide the current workspace automatically.
+Use the global `flash-mem` command and register it once in the editor's MCP settings. This also applies if you are using a Claude extension inside VS Code; treat it as a VS Code extension and use `.vscode/mcp.json` with the `servers` key.
 
 ```json
 {
-  "mcpServers": {
+  "servers": {
     "flash-mem": {
       "command": "flash-mem",
       "args": [
         "mcp"
       ],
       "env": {
-      }
+      },
+      "type": "local",
+      "tools": [
+        "*"
+      ]
     }
   }
 }
@@ -64,14 +89,14 @@ Use the global `flash-mem` command and let the extension provide the current wor
 
 ### Antigravity IDE
 
-Antigravity IDE automatically reads the `.vscode/mcp.json` file. The VS Code extension setup above works perfectly for Antigravity IDE without any global configuration.
+Configure Antigravity IDE once with the same global MCP server entry.
 
 ### Antigravity CLI
 
-Antigravity CLI uses a centralized global configuration (`~/.gemini/config/mcp_config.json`).
-You do not need to configure this manually! Simply run `flash-mem init .` in your workspace, and it will automatically register your project in Antigravity's global configuration.
+Antigravity CLI uses a centralized global configuration (`~/.gemini/config/mcp_config.json`). Configure it once on the machine, then run `flash-mem init .` in each new workspace.
 
 If you prefer to configure it manually, add the following to `~/.gemini/config/mcp_config.json`:
+
 ```json
 {
   "mcpServers": {
@@ -99,7 +124,7 @@ npm run build
 
 ### Claude Desktop
 
-Use the built CLI path.
+Use the built CLI path and register it once in the client with the standard `mcpServers` shape.
 
 ```json
 {
@@ -119,9 +144,27 @@ Use the built CLI path.
 
 ### VS Code Extensions
 
-Use the built CLI path and omit the workspace argument so the extension current directory is used.
+Use the built CLI path and register it once in the editor's MCP settings. This also applies if you are using a Claude extension inside VS Code; treat it as a VS Code extension and use `.vscode/mcp.json` with the `servers` key.
 
-**TOML example for Codex:**
+```json
+{
+  "servers": {
+    "flash-mem": {
+      "command": "node",
+      "args": [
+        "/absolute/path/to/flash-mem/dist/infrastructure/cli/index.js",
+        "mcp"
+      ],
+      "env": {
+      }
+    }
+  }
+}
+``` 
+
+### Codex
+
+Codex uses `~/.codex/config.toml`. The snippet below is the repo-local template to copy or symlink into that file.
 ```toml
 [mcp_servers.flash_mem]
 command = "node"
@@ -134,14 +177,14 @@ enabled = true
 
 ### Antigravity IDE
 
-Antigravity IDE automatically reads the `.vscode/mcp.json` file. The VS Code extension setup above works perfectly for Antigravity IDE. Running `flash-mem init .` will scaffold this file for you.
+Configure Antigravity IDE once with the same built CLI path.
 
 ### Antigravity CLI
 
-Antigravity CLI uses a centralized global configuration (`~/.gemini/config/mcp_config.json`).
-You do not need to configure this manually! Simply run `flash-mem init .` in your workspace, and it will automatically register your project in Antigravity's global configuration using the local CLI path.
+Antigravity CLI uses a centralized global configuration (`~/.gemini/config/mcp_config.json`). Point it at the built CLI once, then use `flash-mem init .` for each project.
 
 If you prefer to configure it manually, add the following to `~/.gemini/config/mcp_config.json`:
+
 ```json
 {
   "mcpServers": {
@@ -158,21 +201,17 @@ If you prefer to configure it manually, add the following to `~/.gemini/config/m
 }
 ```
 
-### Where To Store It
+### What `init` Creates
 
-`flash-mem init .` scaffolds the project-local MCP bundle inside the repository workspace. The generated files live here:
+`flash-mem init .` scaffolds the project-local memory workspace inside the repository. The generated files live here:
 
 ```text
 <project-root>/
   AGENTS.md
   ANTIGRAVITY.md
-  CLINE.md
+  CLAUDE.md
   .cursor/rules/flash-mem.mdc
   .github/copilot-instructions.md
-  .cursor/mcp.json
-  .mcp.json
-  .vscode/mcp.json
-  .codex/config.toml
   .flash-mem/
   src/
   docs/
@@ -182,19 +221,16 @@ Notes:
 
 - `AGENTS.md` is the shared prompt surface for other AI agents and codifies the project memory protocol.
 - `ANTIGRAVITY.md` is the prompt surface for Antigravity.
+- `CLAUDE.md` is the prompt surface for Claude Code.
 - `.cursor/rules/flash-mem.mdc` is the Cursor rule file written by init.
-- `CLINE.md` is the prompt surface for Cline.
 - `.github/copilot-instructions.md` is the GitHub Copilot instruction file written by init.
-- `.cursor/mcp.json` is for Cursor project-level MCP.
-- `.mcp.json` is for GitHub Copilot project-level MCP.
-- `.vscode/mcp.json` is for VS Code, Copilot, and Antigravity IDE setups that read the VS Code MCP format.
 - `.codex/config.toml` is a repo-local Codex template; Codex still reads its active config from `~/.codex/config.toml`, so copy or symlink this file there if you want Codex to use it automatically.
 
 If the agent-instruction files already exist, use `flash-mem update .` to refresh the protocol block in place without touching the surrounding content.
 
-If your client expects a different project-local path, keep the file inside the repo workspace so each project can have its own isolated MCP config.
+If your client expects a different MCP config location, set that up once in the client config and keep the workspace itself focused on `flash-mem init .`.
 
-**JSON example for Cline and Roo Code:**
+**JSON example for clients that use the standard MCP `mcpServers` JSON shape:**
 ```json
 {
   "mcpServers": {

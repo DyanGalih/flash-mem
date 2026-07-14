@@ -25,6 +25,7 @@ describe('InitializeProjectService Unit', () => {
     // Folders check
     expect(fs.existsSync(path.join(testWorkspace, '.flash-mem'))).toBe(true);
     expect(fs.existsSync(path.join(testWorkspace, '.flash-mem/exports'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, 'CLAUDE.md'))).toBe(true);
 
 
     // Metadata file check
@@ -87,6 +88,14 @@ describe('InitializeProjectService Unit', () => {
     expect(fs.existsSync(path.join(testWorkspace, '.cursorrules'))).toBe(false);
   });
 
+  it('should create multiple selected prompt targets during interactive-style init', () => {
+    service.execute(testWorkspace, { promptTargetIds: ['antigravity', 'claude'] });
+
+    expect(fs.existsSync(path.join(testWorkspace, '.agents/AGENTS.md'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, 'CLAUDE.md'))).toBe(true);
+    expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
+  });
+
 
 
   it('should detect and update only existing prompt targets when requested', () => {
@@ -108,7 +117,7 @@ describe('InitializeProjectService Unit', () => {
     expect(result.detected.map((target) => target.filePath)).toEqual(['.agents/AGENTS.md']);
     expect(result.updated).toContain(targetPath);
     const updatedContent = fs.readFileSync(targetPath, 'utf-8');
-    expect(updatedContent).toContain('<!-- flash-mem-protocol-start v9 -->');
+    expect(updatedContent).toContain('<!-- flash-mem-protocol-start v10 -->');
     expect(updatedContent).toContain('## Pre-Flight Gate');
     expect(updatedContent).toContain('you MUST call `get_project_summary` and `search_memory` first');
     expect(updatedContent).toContain('if flash-mem is unavailable, note it explicitly and continue with local files');
@@ -124,7 +133,7 @@ describe('InitializeProjectService Unit', () => {
     expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
   });
 
-  it('should upgrade v8 protocol block to v9 with Pre-Flight Gate', () => {
+  it('should upgrade v8 protocol block to v10 with Pre-Flight Gate', () => {
     const targetPath = path.join(testWorkspace, '.agents/AGENTS.md');
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     // Write a v8 block (no Pre-Flight Gate)
@@ -152,7 +161,7 @@ describe('InitializeProjectService Unit', () => {
 
     const content = fs.readFileSync(targetPath, 'utf-8');
     // Version upgraded
-    expect(content).toContain('<!-- flash-mem-protocol-start v9 -->');
+    expect(content).toContain('<!-- flash-mem-protocol-start v10 -->');
     expect(content).not.toContain('<!-- flash-mem-protocol-start v8 -->');
     // Pre-Flight Gate present
     expect(content).toContain('## Pre-Flight Gate');

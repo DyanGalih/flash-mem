@@ -15,7 +15,7 @@ import { ProjectSummaryService } from '../application/services/ProjectSummarySer
 import { RelevantContextService } from '../application/services/RelevantContextService';
 import { SchemaMigrationService } from '../application/services/SchemaMigrationService';
 import { SharedLessonService } from '../application/services/SharedLessonService';
-import { SpecKitCompatibilityService } from '../application/services/SpecKitCompatibilityService';
+import { AiEngineeringExtensionsService } from '../application/services/AiEngineeringExtensionsService';
 import { TokenBudgetService } from '../application/services/TokenBudgetService';
 import { WorkspaceIndexingService } from '../application/services/WorkspaceIndexingService';
 import { Project } from '../domain/entities/Project';
@@ -52,7 +52,7 @@ export interface WorkspaceBundle {
   memorySynthesisService: MemorySynthesisService;
   docSynthesisService: DocSynthesisService;
   sharedLessonService: SharedLessonService;
-  compatibilityService: SpecKitCompatibilityService;
+  compatibilityService: AiEngineeringExtensionsService;
   workspaceIndexingService: WorkspaceIndexingService;
 }
 
@@ -161,7 +161,7 @@ export class WorkspaceManager {
     const globalDb = getGlobalHubDatabase();
     const globalSharedLessonRepository = new SharedLessonRepository(globalDb);
     const sharedLessonService = new SharedLessonService(sharedLessonRepository, globalSharedLessonRepository);
-    const compatibilityService = new SpecKitCompatibilityService(
+    const compatibilityService = new AiEngineeringExtensionsService(
       memorySynthesisService,
       docSynthesisService,
       sharedLessonService,

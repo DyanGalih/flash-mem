@@ -11,7 +11,7 @@ const PROTOCOL_END_MARKER_TEXT = '<!-- flash-mem-protocol-end -->';
 
 export type MemoryProtocolProfile = 'default' | 'strict';
 
-export type AgentInstructionTargetId = 'antigravity' | 'agents' | 'cursor' | 'cline' | 'copilot' | 'codex';
+export type AgentInstructionTargetId = 'antigravity' | 'agents' | 'cursor' | 'cline' | 'copilot' | 'codex' | 'claude';
 
 export interface AgentInstructionTargetDefinition {
   id: AgentInstructionTargetId;
@@ -34,6 +34,7 @@ export interface WriteAgentInstructionsResult {
 
 export const AGENT_INSTRUCTION_TARGETS: AgentInstructionTargetDefinition[] = [
   { id: 'antigravity', label: 'Antigravity', filePath: '.agents/AGENTS.md', kind: 'antigravity' },
+  { id: 'claude', label: 'Claude Code', filePath: 'CLAUDE.md', kind: 'agent' },
   { id: 'cursor', label: 'Cursor', filePath: '.cursor/rules/flash-mem.mdc', kind: 'cursor' },
   { id: 'copilot', label: 'GitHub Copilot', filePath: '.github/copilot-instructions.md', kind: 'copilot' },
   { id: 'codex', label: 'Codex', filePath: 'AGENTS.md', kind: 'agent' },
@@ -57,6 +58,7 @@ function buildAgentInstructionBlock(version: number, profile: MemoryProtocolProf
     `Before ANY of the following actions, you MUST call \`get_project_summary\` and \`search_memory\` first`,
     `(if flash-mem is unavailable, note it explicitly and continue with local files):`,
     `- Creating or updating an implementation plan`,
+    `- Creating, updating, or reviewing specification documents or SDD framework artifacts`,
     `- Writing, modifying, or deleting source code`,
     `- Generating specifications, tasks, or technical plans`,
     `- Making architecture or design decisions`,
@@ -238,7 +240,7 @@ export class InitializeProjectService {
 
   // Increment this version number whenever the agent instruction template changes.
   // Existing files with an older version marker will be automatically updated.
-  private static readonly PROTOCOL_VERSION = 9;
+  private static readonly PROTOCOL_VERSION = 10;
   private static readonly PROTOCOL_START_MARKER = PROTOCOL_START_MARKER_TEXT;
   private static readonly PROTOCOL_END_MARKER = PROTOCOL_END_MARKER_TEXT;
 

@@ -1,12 +1,25 @@
-<!-- flash-mem-protocol-start v9 -->
+<!-- flash-mem-protocol-start v10 -->
 # flash-mem
 
 ## Goal
 Keep durable project memory current and easy to retrieve.
 
+## Pre-Flight Gate — MANDATORY
+Before ANY of the following actions, you MUST call `get_project_summary` and `search_memory` first
+(if flash-mem is unavailable, note it explicitly and continue with local files):
+- Creating or updating an implementation plan
+- Creating, updating, or reviewing specification documents or SDD framework artifacts
+- Writing, modifying, or deleting source code
+- Generating specifications, tasks, or technical plans
+- Making architecture or design decisions
+- Responding to debugging or incident questions
+
+Do NOT skip this step. Do NOT proceed to file reads, code edits, or plan generation until flash-mem has been queried.
+Exception: For trivially scoped changes (e.g., typo fixes, formatting, single-line comment edits) where no architectural or behavioral context is needed, the gate may be skipped.
+
 ## Rules
 - Treat flash-mem as the source of truth for durable project memory.
-- Search first: read `get_project_summary` and `search_memory` before planning, drafting, or changing code.
+- Search first (see Pre-Flight Gate above for the exhaustive trigger list).
 - Prefer summaries, metadata, tags, confidence, and related files before loading full memory content.
 - Store only durable knowledge: decisions, conventions, constraints, bugs, workflows.
 - Use `update_memory` when refining an existing memory; use `add_memory` for genuinely new durable facts.

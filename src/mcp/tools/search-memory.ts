@@ -1,10 +1,8 @@
 import { z } from 'zod';
-import { MemorySearchService } from '../../application/services/MemorySearchService';
 import { WorkspaceManager } from "../WorkspaceManager";
 
 export const searchMemoryInputSchema = z.object({
     project_path: z.string().min(1).describe("Absolute path to the workspace root"),
-    projectId: z.string().optional(),
   query: z.string().optional(),
   category: z.string().optional(),
   tags: z.array(z.string().min(1)).optional(),
@@ -22,8 +20,11 @@ export function createSearchMemoryTool(manager: WorkspaceManager) {
     schema: searchMemoryInputSchema,
     responseFormat: 'toon' as const,
     execute: (input: z.infer<typeof searchMemoryInputSchema>) => {
-      const service = manager.getBundle(input.project_path).memorySearchService;
-      return service.search(input);
+      const bundle = manager.getBundle(input.project_path);
+      return bundle.memorySearchService.search({
+        ...input,
+        projectId: bundle.project.id
+      });
     }
   };
 }

@@ -33,7 +33,7 @@ export class ArtifactReader {
     };
   }
 
-  public readSpecKitArtifact(workspaceRoot: string, featurePath: string, artifactName: string): ArtifactDocument {
+  public readCompatibilityArtifact(workspaceRoot: string, featurePath: string, artifactName: string): ArtifactDocument {
     // Dynamically handle configured artifact templates instead of hardcoding 'spec.md' or 'tasks.md'
     const fullPath = path.join(featurePath, artifactName);
     return this.read(workspaceRoot, fullPath);

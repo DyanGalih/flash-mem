@@ -4,7 +4,7 @@ import { DocSynthesisService } from '../../application/services/DocSynthesisServ
 import { MemorySynthesisService } from '../../application/services/MemorySynthesisService';
 import { MemorySearchService } from '../../application/services/MemorySearchService';
 import { ProjectRepository } from '../../infrastructure/database/repositories/ProjectRepository';
-import { SpecKitCompatibilityService } from '../../application/services/SpecKitCompatibilityService';
+import { AiEngineeringExtensionsService } from '../../application/services/AiEngineeringExtensionsService';
 import { WorkspaceManager } from "../WorkspaceManager";
 
 export const prepareContextInputSchema = z.object({
@@ -57,7 +57,7 @@ export const syncSharedLessonsInputSchema = z.object({
   limit: z.number().int().positive().optional()
 });
 
-export const speckitMemorySearchInputSchema = z.object({
+export const aiEngineeringExtensionsMemorySearchInputSchema = z.object({
     project_path: z.string().min(1).describe("Absolute path to the workspace root"),
     workspaceRoot: z.string().min(1).optional(),
   projectRoot: z.string().min(1).optional(),
@@ -72,7 +72,7 @@ export const speckitMemorySearchInputSchema = z.object({
   limit: z.number().int().positive().max(100).optional()
 });
 
-export const speckitMemorySynthesizeInputSchema = z.object({
+export const aiEngineeringExtensionsMemorySynthesizeInputSchema = z.object({
     project_path: z.string().min(1).describe("Absolute path to the workspace root"),
     workspaceRoot: z.string().min(1).optional(),
   projectRoot: z.string().min(1).optional(),
@@ -84,7 +84,7 @@ export const speckitMemorySynthesizeInputSchema = z.object({
   resultLimit: z.number().int().positive().optional()
 });
 
-export const speckitMemoryTokenReportInputSchema = z.object({
+export const aiEngineeringExtensionsMemoryTokenReportInputSchema = z.object({
     project_path: z.string().min(1).describe("Absolute path to the workspace root"),
     workspaceRoot: z.string().min(1).optional(),
   projectRoot: z.string().min(1).optional(),
@@ -95,7 +95,7 @@ export const speckitMemoryTokenReportInputSchema = z.object({
   tokenBudget: z.number().int().positive().optional()
 });
 
-export const speckitMemoryShareLessonInputSchema = z.object({
+export const aiEngineeringExtensionsMemoryShareLessonInputSchema = z.object({
     project_path: z.string().min(1).describe("Absolute path to the workspace root"),
     workspaceRoot: z.string().min(1).optional(),
   projectRoot: z.string().min(1).optional(),
@@ -107,7 +107,7 @@ export const speckitMemoryShareLessonInputSchema = z.object({
   tags: z.array(z.string().min(1)).optional()
 });
 
-export const speckitMemorySyncSharedInputSchema = z.object({
+export const aiEngineeringExtensionsMemorySyncSharedInputSchema = z.object({
     project_path: z.string().min(1).describe("Absolute path to the workspace root"),
     workspaceRoot: z.string().min(1).optional(),
   projectRoot: z.string().min(1).optional(),
@@ -116,7 +116,7 @@ export const speckitMemorySyncSharedInputSchema = z.object({
   limit: z.number().int().positive().optional()
 });
 
-export const speckitMemoryInitProjectInputSchema = z.object({
+export const aiEngineeringExtensionsMemoryInitProjectInputSchema = z.object({
     project_path: z.string().min(1).describe("Absolute path to the workspace root"),
     workspaceRoot: z.string().min(1).optional(),
   projectRoot: z.string().min(1).optional(),
@@ -159,7 +159,7 @@ function resolveFeatureScope(input: { featurePath?: string; feature?: string }):
 }
 
 function prepareTokenReportContext(
-  service: SpecKitCompatibilityService,
+  service: AiEngineeringExtensionsService,
   workspaceRoot: string,
   featurePath: string | undefined,
   query: string | undefined,
@@ -186,7 +186,7 @@ function resolveProjectId(input: { projectId?: string; workspaceRoot?: string; p
 export function createPrepareContextTool(manager: WorkspaceManager) {
   return {
     name: 'prepare_context',
-    description: 'Prepare a Spec Kit compatible context bundle for the active workspace. Returns TOON text.',
+    description: 'Prepare a AI engineering compatible context bundle for the active workspace. Returns TOON text.',
     schema: prepareContextInputSchema,
     responseFormat: 'toon' as const,
     execute: (input: z.infer<typeof prepareContextInputSchema>) => {
@@ -220,125 +220,21 @@ export function createMemorySynthesisTool(manager: WorkspaceManager) {
     }
   };
 }
-
-export function createSpeckitMemorySearchTool(manager: WorkspaceManager) {
+export function createInitProjectTool(manager: WorkspaceManager) {
   return {
-    name: 'speckit_memory_search',
-    description: 'Compatibility wrapper for Spec Kit memory search requests. Returns TOON text.',
-    schema: speckitMemorySearchInputSchema,
-    responseFormat: 'toon' as const,
-    execute: (input: z.infer<typeof speckitMemorySearchInputSchema>) => {
-      const service = manager.getBundle(input.project_path).memorySearchService;
-          const projectId = manager.getBundle(input.project_path).project.id;
-          const { workspaceRoot: _workspaceRoot, projectRoot: _projectRoot, ...rest } = input;
-          return service.search({
-            ...rest,
-            projectId
-          });
-        }
-  };
-}
-
-export function createSpeckitMemorySynthesizeTool(manager: WorkspaceManager) {
-  return {
-    name: 'speckit_memory_synthesize',
-    description: 'Compatibility wrapper for Spec Kit memory synthesis requests. Returns markdown text.',
-    schema: speckitMemorySynthesizeInputSchema,
-    responseFormat: 'markdown' as const,
-    execute: (input: z.infer<typeof speckitMemorySynthesizeInputSchema>) => {
-      const service = manager.getBundle(input.project_path).memorySynthesisService;
-          const workspaceRoot = resolveWorkspaceRoot(input.workspaceRoot ?? input.projectRoot, input.project_path, input.cwd);
-          return service.buildFeatureSynthesis({
-            workspaceRoot,
-            query: input.query ?? resolveFeatureScope(input) ?? (path.basename(workspaceRoot) || 'workspace'),
-            tokenBudget: input.tokenBudget,
-            resultLimit: input.resultLimit ?? 4
-          });
-        }
-  };
-}
-
-export function createSpeckitMemoryTokenReportTool(manager: WorkspaceManager) {
-  return {
-    name: 'speckit_memory_token_report',
-    description: 'Compatibility wrapper for the Spec Kit token report workflow. Returns TOON text.',
-    schema: speckitMemoryTokenReportInputSchema,
-    responseFormat: 'toon' as const,
-    execute: (input: z.infer<typeof speckitMemoryTokenReportInputSchema>) => {
+    name: 'init_project',
+    description: 'Initialize an SDD memory project profile.',
+    schema: aiEngineeringExtensionsMemoryInitProjectInputSchema,
+    execute: (input: z.infer<typeof aiEngineeringExtensionsMemoryInitProjectInputSchema>) => {
       const service = manager.getBundle(input.project_path).compatibilityService;
-          const prepared = prepareTokenReportContext(
-            service,
-            resolveWorkspaceRoot(input.workspaceRoot ?? input.projectRoot, input.project_path, input.cwd),
-            resolveFeatureScope(input),
-            input.query,
-            input.tokenBudget
-          );
-
-          return {
-            workspaceRoot: prepared.workspaceRoot,
-            featurePath: prepared.featurePath,
-            query: prepared.query,
-            tokenReport: prepared.tokenReport,
-            memorySynthesis: prepared.memorySynthesis,
-            docSynthesis: prepared.docSynthesis
-          };
-        }
-  };
-}
-
-export function createSpeckitMemoryShareLessonTool(manager: WorkspaceManager) {
-  return {
-    name: 'speckit_memory_share_lesson',
-    description: 'Compatibility wrapper for sharing a lesson into shared memory.',
-    schema: speckitMemoryShareLessonInputSchema,
-    execute: (input: z.infer<typeof speckitMemoryShareLessonInputSchema>) => {
-      const service = manager.getBundle(input.project_path).compatibilityService;
-          return service.shareLesson({
-            workspaceRoot: resolveWorkspaceRoot(input.workspaceRoot ?? input.projectRoot, input.project_path),
-            id: input.id,
-            title: input.title,
-            content: input.content,
-            language: input.language,
-            framework: input.framework,
-            tags: input.tags
-          });
-        }
-  };
-}
-
-export function createSpeckitMemorySyncSharedTool(manager: WorkspaceManager) {
-  return {
-    name: 'speckit_memory_sync_shared',
-    description: 'Compatibility wrapper for syncing shared lessons into a review buffer.',
-    schema: speckitMemorySyncSharedInputSchema,
-    execute: (input: z.infer<typeof speckitMemorySyncSharedInputSchema>) => {
-      const service = manager.getBundle(input.project_path).compatibilityService;
-      return service.syncSharedLessons({
-            workspaceRoot: resolveWorkspaceRoot(input.workspaceRoot ?? input.projectRoot, input.project_path),
-            framework: input.framework,
-            language: input.language,
-            limit: input.limit
-          });
+      return service.initProject({
+        workspaceRoot: resolveCompatibilityWorkspaceRoot(input, input.project_path),
+        language: input.language,
+        framework: input.framework
+      });
     }
   };
 }
-
-export function createSpeckitMemoryInitProjectTool(manager: WorkspaceManager) {
-  return {
-    name: 'speckit_memory_init_project',
-    description: 'Compatibility wrapper for initializing a Spec Kit memory project profile.',
-    schema: speckitMemoryInitProjectInputSchema,
-    execute: (input: z.infer<typeof speckitMemoryInitProjectInputSchema>) => {
-      const service = manager.getBundle(input.project_path).compatibilityService;
-          return service.initProject({
-            workspaceRoot: resolveCompatibilityWorkspaceRoot(input, input.project_path),
-            language: input.language,
-            framework: input.framework
-          });
-        }
-  };
-}
-
 export function createDocSynthesisTool(manager: WorkspaceManager) {
   return {
     name: 'doc_synthesis',
