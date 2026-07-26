@@ -97,3 +97,55 @@ export interface IPathSanitizer {
 export interface ICaptureDeduplicationGuard {
   signature(input: { title: string; content: string; category: string }): string;
 }
+
+// Knowledge Object Domain (Epic 2)
+
+import { KnowledgeObject, KnowledgeObjectInput } from '../entities/KnowledgeObject';
+import { KnowledgeRelationship, KnowledgeRelationshipInput } from '../entities/KnowledgeRelationship';
+import { AuthorityChain, AuthorityChainInput } from '../entities/AuthorityChain';
+
+export interface KnowledgeSearchOptions {
+  query?: string;
+  projectId?: string;
+  knowledgeType?: string;
+  authorityLevel?: string;
+  minConfidence?: number | null;
+  includeContent?: boolean;
+  limit?: number;
+}
+
+export interface IKnowledgeObjectRepository {
+  findById(id: string): KnowledgeObject | null;
+  listByProject(projectId: string): KnowledgeObject[];
+  create(input: KnowledgeObjectInput, sourceDocumentId?: string | null): KnowledgeObject;
+  update(id: string, input: Partial<{
+    title: string;
+    content: string;
+    knowledgeType: string;
+    summary: string | null;
+    authorityLevel: string;
+    authoritySource: string | null;
+    confidence: number | null;
+    freshnessStatus: string;
+    scopeLevel: string;
+    scopeProjects: string | null;
+    scopePaths: string | null;
+    captureMethod: string;
+    captureTool: string;
+    extractionRule: string | null;
+  }>): KnowledgeObject | null;
+  softDelete(id: string): boolean;
+  findByHash(projectId: string, hash: string): KnowledgeObject | null;
+  search(options: KnowledgeSearchOptions): Array<KnowledgeObject & { tags: string[]; relationships: KnowledgeRelationship[]; score: number }>;
+  refreshFtsIndex(id: string): void;
+}
+
+export interface IKnowledgeRelationshipRepository {
+  listForSource(sourceId: string): KnowledgeRelationship[];
+  upsert(projectId: string, sourceId: string, input: KnowledgeRelationshipInput): KnowledgeRelationship;
+}
+
+export interface IAuthorityChainRepository {
+  listForKnowledge(objectId: string): AuthorityChain[];
+  append(projectId: string, input: AuthorityChainInput): AuthorityChain;
+}
