@@ -78,19 +78,4 @@ jspm_packages/
 .DS_Store
 Thumbs.db
 
-# --- Spec Kit & Agent Memory Ignores ---
-.specify/
-.agents/
-specs/
-docs/memory/
-.spec-kit-memory/
-AGENTS.md
-GEMINI.md
-ANTIGRAVITY.md
-.github/
-.gemini/
-.vscode/
 .flash-mem/
-.cursorrulestests/integration/*-workspace/
-CLAUDE.md
-.codex/

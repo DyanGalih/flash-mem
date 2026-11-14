@@ -3,7 +3,10 @@
 Lightweight user-facing notes for each release.
 
 ## Unreleased
-- No unreleased changes yet.
+- Requires Node.js 22 or newer.
+- Uses the published `@toon-format/toon` package.
+- Validated with Node.js 22 and 24 on Linux; macOS ARM is validated in CI when a compatible runner is available.
+- `better-sqlite3` may still require native build tools on platforms without a prebuilt binary.
 
 ## v0.2.2
 - Added:

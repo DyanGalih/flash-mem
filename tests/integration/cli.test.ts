@@ -12,6 +12,7 @@ import { RelationshipRepository } from '../../src/infrastructure/database/reposi
 import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
 import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
+import { WorkspaceStorageResolver } from '../../src/infrastructure/safety/WorkspaceStorageResolver';
 
 vi.mock('readline', () => ({
   createInterface: vi.fn(),
@@ -152,10 +153,12 @@ describe('CLI Integration', () => {
   beforeEach(() => {
     fs.removeSync(testWorkspace);
     fs.ensureDirSync(testWorkspace);
+    fs.removeSync(WorkspaceStorageResolver.resolveWorkspaceStorage(testWorkspace).workspaceDir);
   });
 
   afterEach(() => {
     fs.removeSync(testWorkspace);
+    fs.removeSync(WorkspaceStorageResolver.resolveWorkspaceStorage(testWorkspace).workspaceDir);
   });
 
   it('should initialize a project and print plain text output on success', async () => {
@@ -266,7 +269,7 @@ describe('CLI Integration', () => {
 
   it('should export markdown backups from the CLI boundary', async () => {
     let exportCreatedAt = 0;
-    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const dbFile = WorkspaceStorageResolver.resolveWorkspaceStorage(testWorkspace).dbPath;
     const db = createDatabaseConnection(dbFile);
     try {
       new SchemaMigrationService(db).ensureCurrentSchema();
@@ -308,7 +311,7 @@ describe('CLI Integration', () => {
   it('should prepare combined context through the compatibility CLI', async () => {
     await execAsync(`node ${cliScript} init "${testWorkspace}"`);
 
-    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const dbFile = WorkspaceStorageResolver.resolveWorkspaceStorage(testWorkspace).dbPath;
     const db = createDatabaseConnection(dbFile);
     try {
       new SchemaMigrationService(db).ensureCurrentSchema();
@@ -377,7 +380,7 @@ describe('CLI Integration', () => {
   it('should store combined context directly in flash-mem when --store is used', async () => {
     await execAsync(`node ${cliScript} init "${testWorkspace}"`);
 
-    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const dbFile = WorkspaceStorageResolver.resolveWorkspaceStorage(testWorkspace).dbPath;
     const db = createDatabaseConnection(dbFile);
     try {
       new SchemaMigrationService(db).ensureCurrentSchema();
@@ -508,7 +511,7 @@ describe('CLI Integration', () => {
     expect(stdout).toContain('Index rebuilt successfully!');
 
     // Verify it was indexed
-    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const dbFile = WorkspaceStorageResolver.resolveWorkspaceStorage(testWorkspace).dbPath;
     const db = createDatabaseConnection(dbFile);
     try {
       const row = db.prepare(`SELECT * FROM memory_entries WHERE title = 'Decision: SQLite'`).get() as any;
@@ -530,7 +533,7 @@ describe('CLI Integration', () => {
     expect(stdout).toContain('ID:');
 
     // Verify it is in database
-    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const dbFile = WorkspaceStorageResolver.resolveWorkspaceStorage(testWorkspace).dbPath;
     const db = createDatabaseConnection(dbFile);
     try {
       const row = db.prepare(`SELECT * FROM memory_entries WHERE title = 'CLI Memory'`).get() as any;
@@ -640,7 +643,7 @@ describe('CLI Integration', () => {
     expect(stdout).toContain('Memory entry added successfully!');
     expect(stderr).toBe('');
 
-    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const dbFile = WorkspaceStorageResolver.resolveWorkspaceStorage(testWorkspace).dbPath;
     const db = createDatabaseConnection(dbFile);
     try {
       const row = db.prepare(`SELECT * FROM memory_entries WHERE title = 'Interactive Title'`).get() as any;
@@ -671,7 +674,7 @@ describe('CLI Integration', () => {
     expect(result.success).toBe(true);
     expect(result.id).toBeTypeOf('string');
 
-    const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+    const dbFile = WorkspaceStorageResolver.resolveWorkspaceStorage(testWorkspace).dbPath;
     const db = createDatabaseConnection(dbFile);
     try {
       const row = db.prepare(`SELECT * FROM memory_entries WHERE title = 'Git Root Memory'`).get() as any;

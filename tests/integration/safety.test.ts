@@ -13,6 +13,7 @@ import { SourceDocumentRepository } from '../../src/infrastructure/database/repo
 import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 import { ExportSafetyGuard } from '../../src/infrastructure/safety/ExportSafetyGuard';
+import { WorkspaceStorageResolver } from '../../src/infrastructure/safety/WorkspaceStorageResolver';
 import { createMcpServer } from '../../src/mcp/server';
 
 function execCli(args: string, options: { cwd?: string } = {}): Promise<{ stdout: string; stderr: string; code: number }> {
@@ -33,15 +34,17 @@ function execCli(args: string, options: { cwd?: string } = {}): Promise<{ stdout
 
 describe('Safety and Secret Filtering Integration', () => {
   const testWorkspace = path.resolve(__dirname, 'safety-integration-workspace');
-  const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+  const dbFile = WorkspaceStorageResolver.resolveWorkspaceStorage(testWorkspace).dbPath;
 
   beforeEach(() => {
     fs.removeSync(testWorkspace);
     fs.ensureDirSync(testWorkspace);
+    fs.removeSync(path.dirname(dbFile));
   });
 
   afterEach(() => {
     fs.removeSync(testWorkspace);
+    fs.removeSync(path.dirname(dbFile));
   });
 
   describe('MCP Safety Integration (T015)', () => {

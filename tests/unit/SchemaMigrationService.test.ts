@@ -23,7 +23,7 @@ describe('SchemaMigrationService', () => {
     db = createDatabaseConnection(testDbFile);
     const service = new SchemaMigrationService(db);
 
-    expect(service.ensureCurrentSchema()).toBe('1.1.0');
-    expect(service.currentVersion()).toBe('1.1.0');
+    expect(service.ensureCurrentSchema()).toBe('2.0.0');
+    expect(service.currentVersion()).toBe('2.0.0');
   });
 });

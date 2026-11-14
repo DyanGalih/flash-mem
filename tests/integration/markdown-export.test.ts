@@ -12,16 +12,20 @@ import { RelationshipRepository } from '../../src/infrastructure/database/reposi
 import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
 import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
+import { WorkspaceStorageResolver } from '../../src/infrastructure/safety/WorkspaceStorageResolver';
 
 describe('Markdown export integration', () => {
   let db: any;
   let memory: MemoryEntryService;
   let projectRepo: ProjectRepository;
   const testWorkspace = path.resolve(__dirname, 'markdown-export-integration-workspace');
-  const dbFile = path.join(testWorkspace, '.flash-mem', 'flashmem.sqlite');
+  const dbFile = WorkspaceStorageResolver.resolveWorkspaceStorage(testWorkspace).dbPath;
 
   beforeEach(() => {
     fs.removeSync(testWorkspace);
+    fs.ensureDirSync(testWorkspace);
+    fs.removeSync(path.dirname(dbFile));
+    fs.ensureDirSync(path.dirname(dbFile));
     db = createDatabaseConnection(dbFile);
     new SchemaMigrationService(db).ensureCurrentSchema();
 
@@ -41,6 +45,7 @@ describe('Markdown export integration', () => {
       db.close();
     }
     fs.removeSync(testWorkspace);
+    fs.removeSync(path.dirname(dbFile));
   });
 
   it('exports the expected markdown files with readable content', async () => {

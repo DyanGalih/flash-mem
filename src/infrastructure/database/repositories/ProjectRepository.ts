@@ -88,6 +88,11 @@ export class ProjectRepository implements IProjectRepository {
     this.db.prepare(`DELETE FROM memory_entries WHERE project_id = ?`).run(projectId);
     this.db.prepare(`DELETE FROM tags WHERE project_id = ?`).run(projectId);
     this.db.prepare(`DELETE FROM relationships WHERE project_id = ?`).run(projectId);
+    try {
+      this.db.prepare(`UPDATE knowledge_objects SET source_doc_id = NULL WHERE project_id = ?`).run(projectId);
+    } catch {
+      // Table may not exist yet in older schema
+    }
     this.db.prepare(`DELETE FROM source_documents WHERE project_id = ?`).run(projectId);
   }
 }

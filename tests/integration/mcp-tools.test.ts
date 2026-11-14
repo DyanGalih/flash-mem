@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as fs from 'fs-extra';
 import { performance } from 'node:perf_hooks';
 import { PassThrough } from 'node:stream';
@@ -7,21 +8,25 @@ import { SchemaMigrationService } from '../../src/application/services/SchemaMig
 import { createDatabaseConnection } from '../../src/infrastructure/database/connection';
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
 import { decodeToon } from '../../src/infrastructure/llm/toon';
+import { WorkspaceStorageResolver } from '../../src/infrastructure/safety/WorkspaceStorageResolver';
 import { createMcpServer, startMcpServer } from '../../src/mcp/server';
 import { WorkspaceManager } from '../../src/mcp/WorkspaceManager';
 
 describe('MCP Server Foundation', () => {
   let db: any;
   let previousGlobalDbPath: string | undefined;
-  const testDbFile = path.resolve(__dirname, 'mcp-tools-workspace', '.flash-mem', 'flashmem.sqlite');
-  const workspaceRoot = path.dirname(path.dirname(testDbFile));
+  const workspaceRoot = path.resolve(__dirname, 'mcp-tools-workspace');
+  const testDbFile = WorkspaceStorageResolver.resolveWorkspaceStorage(workspaceRoot).dbPath;
 
   beforeEach(() => {
+    fs.removeSync(workspaceRoot);
+    fs.ensureDirSync(workspaceRoot);
     fs.removeSync(path.dirname(testDbFile));
+    fs.ensureDirSync(path.dirname(testDbFile));
     previousGlobalDbPath = process.env.FLASH_MEM_GLOBAL_DB_PATH;
     process.env.FLASH_MEM_GLOBAL_DB_PATH = path.resolve(
       path.dirname(testDbFile),
-      `.hub-${Date.now()}-${Math.random().toString(16).slice(2)}.sqlite`
+      `.hub-${Date.now()}-${crypto.randomBytes(4).toString('hex')}.sqlite`
     );
     db = createDatabaseConnection(testDbFile);
     new SchemaMigrationService(db).ensureCurrentSchema();
@@ -36,6 +41,7 @@ describe('MCP Server Foundation', () => {
     } else {
       process.env.FLASH_MEM_GLOBAL_DB_PATH = previousGlobalDbPath;
     }
+    fs.removeSync(workspaceRoot);
     fs.removeSync(path.dirname(testDbFile));
   });
 

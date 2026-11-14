@@ -1,0 +1,24 @@
+{
+  "queries": [
+    { "queryId": "q01", "query": "sqlite storage", "relevantIds": ["ko1", "ko6", "ko7"] },
+    { "queryId": "q02", "query": "full text search", "relevantIds": ["ko2", "ko8"] },
+    { "queryId": "q03", "query": "secret scanning", "relevantIds": ["ko3", "ko17"] },
+    { "queryId": "q04", "query": "TOON format", "relevantIds": ["ko4", "ko18"] },
+    { "queryId": "q05", "query": "relationship graph walk", "relevantIds": ["ko5"] },
+    { "queryId": "q06", "query": "WAL concurrency", "relevantIds": ["ko6"] },
+    { "queryId": "q07", "query": "better-sqlite3", "relevantIds": ["ko7", "ko12"] },
+    { "queryId": "q08", "query": "FTS5 risk", "relevantIds": ["ko8"] },
+    { "queryId": "q09", "query": "additive migration", "relevantIds": ["ko9"] },
+    { "queryId": "q10", "query": "project path parameter", "relevantIds": ["ko10"] },
+    { "queryId": "q11", "query": "zod validation", "relevantIds": ["ko11"] },
+    { "queryId": "q12", "query": "repository pattern", "relevantIds": ["ko12"] },
+    { "queryId": "q13", "query": "MCP stdio", "relevantIds": ["ko13"] },
+    { "queryId": "q14", "query": "entries v2 view", "relevantIds": ["ko14"] },
+    { "queryId": "q15", "query": "external LLM", "relevantIds": ["ko15"] },
+    { "queryId": "q16", "query": "capture orchestrator", "relevantIds": ["ko16"] },
+    { "queryId": "q17", "query": "secret warnings", "relevantIds": ["ko17"] },
+    { "queryId": "q18", "query": "TOON stored", "relevantIds": ["ko18"] },
+    { "queryId": "q19", "query": "fs-extra", "relevantIds": ["ko19"] },
+    { "queryId": "q20", "query": "path sanitization", "relevantIds": ["ko20"] }
+  ]
+}

@@ -180,3 +180,50 @@ Start the local MCP server over stdio to integrate with AI interfaces (such as C
 ```bash
 flash-mem mcp [path]
 ```
+
+---
+
+### 9. Migrate Backfill
+
+Convert legacy memory entries into typed knowledge objects (idempotent via content hash).
+
+```bash
+flash-mem migrate backfill [path]
+```
+
+**Options:**
+* `-j, --json`: Output structured JSON with `converted` and `skipped` counts.
+* `--dry-run`: Report planned backfill without writing to the database.
+
+---
+
+### 10. Knowledge Operations
+
+Interact with typed knowledge objects from the CLI.
+
+```bash
+flash-mem knowledge <action> [id] [options]
+```
+
+**Actions:**
+* `search`: Hybrid search over knowledge objects. Use `--query` and `--limit`.
+* `get <id>`: Fetch a single knowledge object by ID.
+* `add`: Create a knowledge object. Use `--title`, `--content`, `--knowledge-type`.
+* `update <id>`: Update a knowledge object. Use `--title`/`--content` and `--change-reason`.
+* `delete <id>`: Soft delete a knowledge object.
+
+**Options:**
+* `--project-path <path>`: Workspace root path.
+
+---
+
+### 11. Config Operations
+
+Read and write the workspace configuration (`.flash-mem/config.json`).
+
+```bash
+flash-mem config get [key]
+flash-mem config set <key> <value>
+```
+
+Keys use dot-separated paths (e.g. `retrieval.maxResults`). Omit `key` in `get` to print the full config.

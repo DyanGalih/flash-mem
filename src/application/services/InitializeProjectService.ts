@@ -5,6 +5,7 @@ import { ProjectMetadata, ProjectMetadataSchema } from '../../domain/entities/Pr
 import { createDatabaseConnection } from '../../infrastructure/database/connection';
 import { SchemaRepository } from '../../infrastructure/database/repositories/SchemaRepository';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
+import { WorkspaceStorageResolver } from '../../infrastructure/safety/WorkspaceStorageResolver';
 
 const PROTOCOL_START_MARKER_TEXT = '<!-- flash-mem-protocol-start';
 const PROTOCOL_END_MARKER_TEXT = '<!-- flash-mem-protocol-end -->';
@@ -87,9 +88,15 @@ function buildAgentInstructionBlock(version: number, profile: MemoryProtocolProf
     `- Never store secrets, credentials, tokens, or private keys in memory content.`,
     ``,
     `## Tools`,
-    `- Read: \`get_project_summary\`, \`search_memory\`, \`get_relevant_context\``,
-    `- Write: \`add_memory\`, \`update_memory\`, \`delete_memory\``,
-    `- Maintain: \`capture_artifact_memory\`, \`export_markdown\``,
+    `- Read: \`get_project_summary\`, \`search_memory\`, \`get_relevant_context\`, \`search_knowledge\`, \`get_knowledge_object\`, \`resolve_conflicts\``,
+    `- Write: \`add_memory\`, \`update_memory\`, \`delete_memory\`, \`add_knowledge_object\`, \`update_knowledge_object\`, \`delete_knowledge_object\``,
+    `- Maintain: \`capture_artifact_memory\`, \`export_markdown\`, \`capture_from_policy\`, \`validate_knowledge\``,
+    ``,
+    `## Knowledge Objects`,
+    `- Flash-mem 1.0 stores durable engineering knowledge as typed \`knowledge_objects\` with authority levels (definitive, validated, provisional, deprecated), freshness status, and typed relationships.`,
+    `- Prefer \`search_knowledge\` over \`search_memory\` for typed knowledge retrieval; \`search_memory\` still returns legacy entries and knowledge objects via the unified \`entries_v2\` view.`,
+    `- Use \`add_knowledge_object\` when capturing a single decision, constraint, convention, pattern, risk, dependency, integration, spec, lesson, or insight.`,
+    `- \`capture_from_policy\` extracts knowledge from Architecture Guard policies; \`resolve_conflicts\` finds objects with \`conflicts_with\` relationships; \`validate_knowledge\` checks freshness and authority.`,
     ``,
     `## Workflow`,
     `1. Read summary.`,
@@ -175,7 +182,8 @@ export class InitializeProjectService {
     const flashMemDir = PathSanitizer.sanitizeSubPath(resolvedRoot, '.flash-mem');
     const exportsDir = PathSanitizer.sanitizeSubPath(resolvedRoot, '.flash-mem/exports');
     const indexJsonFile = PathSanitizer.sanitizeSubPath(resolvedRoot, '.flash-mem/index.json');
-    const dbFile = PathSanitizer.sanitizeSubPath(resolvedRoot, '.flash-mem/flashmem.sqlite');
+    const storageInfo = WorkspaceStorageResolver.ensureWorkspaceStorageInitialized(resolvedRoot);
+    const dbFile = storageInfo.dbPath;
 
     // 1. Check Colliding File Name: if .flash-mem exists but is a regular file
     if (fs.existsSync(flashMemDir)) {
@@ -240,7 +248,7 @@ export class InitializeProjectService {
 
   // Increment this version number whenever the agent instruction template changes.
   // Existing files with an older version marker will be automatically updated.
-  private static readonly PROTOCOL_VERSION = 10;
+  private static readonly PROTOCOL_VERSION = 12;
   private static readonly PROTOCOL_START_MARKER = PROTOCOL_START_MARKER_TEXT;
   private static readonly PROTOCOL_END_MARKER = PROTOCOL_END_MARKER_TEXT;
 

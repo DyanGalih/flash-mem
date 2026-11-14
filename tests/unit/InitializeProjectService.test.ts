@@ -1,19 +1,31 @@
 import * as fs from 'fs-extra';
+import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { InitializeProjectService } from '../../src/application/services/InitializeProjectService';
+import { WorkspaceStorageResolver } from '../../src/infrastructure/safety/WorkspaceStorageResolver';
 
 describe('InitializeProjectService Unit', () => {
   const service = new InitializeProjectService();
   const testWorkspace = path.resolve(__dirname, 'test-workspace-service');
+  const originalFlashMemHome = process.env.FLASH_MEM_HOME;
+  let centralHome: string;
 
   beforeEach(() => {
     fs.removeSync(testWorkspace);
     fs.ensureDirSync(testWorkspace);
+    centralHome = fs.mkdtempSync(path.join(os.tmpdir(), 'flash-mem-central-'));
+    process.env.FLASH_MEM_HOME = centralHome;
   });
 
   afterEach(() => {
     fs.removeSync(testWorkspace);
+    if (originalFlashMemHome === undefined) {
+      delete process.env.FLASH_MEM_HOME;
+    } else {
+      process.env.FLASH_MEM_HOME = originalFlashMemHome;
+    }
+    fs.removeSync(centralHome);
   });
 
   it('should initialize a fresh workspace with folders, metadata, and database', () => {
@@ -35,8 +47,8 @@ describe('InitializeProjectService Unit', () => {
     expect(meta.name).toBe('test-workspace-service');
     expect(meta.schemaVersion).toBe('1.0.0');
 
-    // Database check
-    const dbPath = path.join(testWorkspace, '.flash-mem/flashmem.sqlite');
+    // Database check in central storage
+    const dbPath = WorkspaceStorageResolver.resolveWorkspaceStorage(testWorkspace).dbPath;
     expect(fs.existsSync(dbPath)).toBe(true);
   });
 
@@ -117,7 +129,7 @@ describe('InitializeProjectService Unit', () => {
     expect(result.detected.map((target) => target.filePath)).toEqual(['.agents/AGENTS.md']);
     expect(result.updated).toContain(targetPath);
     const updatedContent = fs.readFileSync(targetPath, 'utf-8');
-    expect(updatedContent).toContain('<!-- flash-mem-protocol-start v10 -->');
+    expect(updatedContent).toContain('<!-- flash-mem-protocol-start v12 -->');
     expect(updatedContent).toContain('## Pre-Flight Gate');
     expect(updatedContent).toContain('you MUST call `get_project_summary` and `search_memory` first');
     expect(updatedContent).toContain('if flash-mem is unavailable, note it explicitly and continue with local files');
@@ -133,7 +145,7 @@ describe('InitializeProjectService Unit', () => {
     expect(fs.existsSync(path.join(testWorkspace, 'CLINE.md'))).toBe(false);
   });
 
-  it('should upgrade v8 protocol block to v10 with Pre-Flight Gate', () => {
+  it('should upgrade v8 protocol block to v12 with Pre-Flight Gate', () => {
     const targetPath = path.join(testWorkspace, '.agents/AGENTS.md');
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
     // Write a v8 block (no Pre-Flight Gate)
@@ -161,7 +173,7 @@ describe('InitializeProjectService Unit', () => {
 
     const content = fs.readFileSync(targetPath, 'utf-8');
     // Version upgraded
-    expect(content).toContain('<!-- flash-mem-protocol-start v10 -->');
+    expect(content).toContain('<!-- flash-mem-protocol-start v12 -->');
     expect(content).not.toContain('<!-- flash-mem-protocol-start v8 -->');
     // Pre-Flight Gate present
     expect(content).toContain('## Pre-Flight Gate');
