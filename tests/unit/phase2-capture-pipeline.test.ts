@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { ExtractionRuleRegistry } from '../../src/domain/entities/ExtractionRule';
 import { KnowledgeObjectInputSchema, VALID_KNOWLEDGE_TYPES } from '../../src/domain/entities/KnowledgeObject';
 import { architectureGuardExtractorRule } from '../../src/infrastructure/capture/ArchitectureGuardExtractor';
 import { specKitExtractorRule } from '../../src/infrastructure/capture/SpecKitExtractor';
@@ -77,6 +78,37 @@ This is the actual spec content.`;
   it('handles empty content gracefully', () => {
     const results = specKitExtractorRule.extract('', '/workspace/specs/feature.spec.md', 'test-proj');
     expect(results).toHaveLength(0);
+  });
+
+  it('correctly tracks code fence length so headings inside multi-backtick blocks are not treated as sections', () => {
+    const content = `# Feature Spec
+
+## Overview
+Overview text.
+
+\`\`\`\`markdown
+## Fake Heading Inside Example
+\`\`\`ts
+const x = 1;
+\`\`\`
+\`\`\`\`
+
+## Real Requirements
+These must be extracted.`;
+
+    const results = specKitExtractorRule.extract(content, '/workspace/specs/feature.spec.md', 'test-proj');
+    expect(results.some(r => r.title.includes('Fake Heading'))).toBe(false);
+    expect(results.some(r => r.title.includes('Real Requirements'))).toBe(true);
+  });
+});
+
+describe('ExtractionRule matching', () => {
+  it('matches nested architecture guard files with brace expansion and deep wildcards', () => {
+    const registry = new ExtractionRuleRegistry();
+    registry.register(architectureGuardExtractorRule);
+    const matches = registry.findMatching('.architecture-guard/sub/rules/security.yaml');
+    expect(matches.length).toBe(1);
+    expect(matches[0].sourceType).toBe('architecture_guard');
   });
 });
 

@@ -273,6 +273,10 @@ export class KnowledgeObjectRepository implements IKnowledgeObjectRepository {
       where.push('ko.confidence >= ?');
       params.push(options.minConfidence);
     }
+    if (options.authorityLevel) {
+      where.push('ko.authority_level = ?');
+      params.push(options.authorityLevel);
+    }
 
     if (options.query?.trim()) {
       const queryLower = options.query.trim().toLowerCase();

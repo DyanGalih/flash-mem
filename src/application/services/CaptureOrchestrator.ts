@@ -55,11 +55,14 @@ export class CaptureOrchestrator {
         } else if (entry.isFile()) {
           const relative = path.relative(baseRoot, fullPath);
           const patternRegex = pattern
-            .replace(/\./g, '\\.')
             .replace(/\{([^}]+)\}/g, (_, choices) => `(?:${choices.split(',').join('|')})`)
-            .replace(/\*\*\//g, '(?:.*\\/)?')
-            .replace(/\*\*/g, '.*')
-            .replace(/\*/g, '[^/]*');
+            .replace(/\*\*\/?|\*|\./g, m => {
+              if (m === '**/') return '(?:.*\\/)?';
+              if (m === '**') return '.*';
+              if (m === '*') return '[^/]*';
+              if (m === '.') return '\\.';
+              return m;
+            });
           if (new RegExp(patternRegex, 'i').test(relative)) {
             files.push(fullPath);
           }

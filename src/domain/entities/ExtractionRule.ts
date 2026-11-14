@@ -26,11 +26,14 @@ export class ExtractionRuleRegistry {
     const matched: ExtractionRule[] = [];
     for (const rule of this.rules.values()) {
       const pattern = rule.filePattern
-        .replace(/\./g, '\\.')
         .replace(/\{([^}]+)\}/g, (_, choices) => `(?:${choices.split(',').join('|')})`)
-        .replace(/\*\*\//g, '(?:.*\\/)?')
-        .replace(/\*\*/g, '.*')
-        .replace(/\*/g, '[^/]*');
+        .replace(/\*\*\/?|\*|\./g, m => {
+          if (m === '**/') return '(?:.*\\/)?';
+          if (m === '**') return '.*';
+          if (m === '*') return '[^/]*';
+          if (m === '.') return '\\.';
+          return m;
+        });
       if (new RegExp(pattern, 'i').test(filePath)) {
         matched.push(rule);
       }

@@ -118,6 +118,30 @@ describe('KnowledgeObjectRepository', () => {
     expect(list).toHaveLength(1);
     expect(list[0].title).toBe('K1');
   });
+
+  it('search fallback filters by authorityLevel', () => {
+    repo.create({
+      projectId: 'p1',
+      knowledgeType: 'decision',
+      title: 'Provisional Decision',
+      content: 'Provisional content',
+      authorityLevel: 'provisional'
+    });
+    repo.create({
+      projectId: 'p1',
+      knowledgeType: 'decision',
+      title: 'Definitive Decision',
+      content: 'Definitive content',
+      authorityLevel: 'definitive'
+    });
+
+    const definitiveResults = repo.search({
+      projectId: 'p1',
+      authorityLevel: 'definitive'
+    });
+    expect(definitiveResults).toHaveLength(1);
+    expect(definitiveResults[0].title).toBe('Definitive Decision');
+  });
 });
 
 describe('KnowledgeRelationshipRepository', () => {

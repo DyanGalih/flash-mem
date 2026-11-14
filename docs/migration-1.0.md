@@ -17,15 +17,17 @@ Migration is applied automatically on connection via `SchemaMigrationService`:
 
 ## Central Storage Migration
 
-Flash-mem 1.0 centralizes per-workspace persistence under `~/.flash-mem/workspaces/<workspace-id>/flashmem.sqlite` and removes repository-local `.sqlite` probing. To migrate an existing repository-local database from an earlier version:
-1. Initialize or run any flash-mem tool in your workspace once to create the central workspace directory.
-2. If you have an existing `.flash-mem/flashmem.sqlite` in your workspace, restore your memories via markdown export or copy the database:
+Flash-mem 1.0 centralizes per-workspace persistence under `~/.flash-mem/workspaces/<workspace-id>/flashmem.sqlite` (or `${FLASH_MEM_HOME}/workspaces/<workspace-id>/flashmem.sqlite` if `FLASH_MEM_HOME` is set) and removes repository-local `.sqlite` probing. To migrate an existing repository-local database from an earlier version:
+1. Stop any running flash-mem processes or MCP servers to flush and checkpoint the WAL journal.
+2. Initialize or run any flash-mem tool in your workspace once to create the central workspace directory.
+3. If you have an existing `.flash-mem/flashmem.sqlite` in your workspace, restore your memories via markdown export or copy the database:
    ```bash
    # Option A: Restore from markdown export
    flash-mem restore .
 
    # Option B: Copy existing database to central storage
-   cp .flash-mem/flashmem.sqlite ~/.flash-mem/workspaces/<workspace-id>/flashmem.sqlite
+   STORAGE_ROOT="${FLASH_MEM_HOME:-$HOME/.flash-mem}"
+   cp .flash-mem/flashmem.sqlite "$STORAGE_ROOT/workspaces/<workspace-id>/flashmem.sqlite"
    ```
 
 ## Backfill
@@ -41,6 +43,18 @@ Maps `category` → `knowledge_type`, sets `authority_level = 'provisional'`, re
 ## Rollback
 
 All schema changes are additive and older code continues reading existing tables without modification. Note that knowledge objects created after upgrading to 1.0 will not be accessible to pre-1.0 versions, as older code queries `memory_entries` exclusively.
+
+To roll back to a pre-1.0 version that reads the repository-local database:
+1. Stop any active flash-mem processes or MCP servers.
+2. Back up your existing repository-local database if present:
+   ```bash
+   cp .flash-mem/flashmem.sqlite .flash-mem/flashmem.sqlite.bak
+   ```
+3. Copy the central database back to the repository-local location so changes made while running 1.0 (such as new `memory_entries`) are preserved:
+   ```bash
+   STORAGE_ROOT="${FLASH_MEM_HOME:-$HOME/.flash-mem}"
+   cp "$STORAGE_ROOT/workspaces/<workspace-id>/flashmem.sqlite" .flash-mem/flashmem.sqlite
+   ```
 
 ## Compatibility Guarantees
 
