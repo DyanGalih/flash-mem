@@ -24,11 +24,22 @@
 - `sync_shared_lessons`
 - `init_project`
 
+## Knowledge Tools (Flash-mem 1.0)
+
+- `search_knowledge` — hybrid FTS5 + lexical search with authority ranking (TOON)
+- `get_knowledge_object` — fetch a single knowledge object by ID (TOON)
+- `add_knowledge_object` — create a typed knowledge object (JSON)
+- `update_knowledge_object` — update with provenance tracking (JSON)
+- `delete_knowledge_object` — soft delete with audit trail (JSON)
+- `capture_from_policy` — extract knowledge from Architecture Guard policies (JSON)
+- `resolve_conflicts` — find knowledge objects with `conflicts_with` relationships (TOON)
+- `validate_knowledge` — run freshness and authority checks (JSON)
+
 ## MCP Response Formats
 
-- TOON: `get_project_summary`, `search_memory`, `get_relevant_context`, `prepare_context`, `token_report`
+- TOON: `get_project_summary`, `search_memory`, `get_relevant_context`, `prepare_context`, `token_report`, `search_knowledge`, `get_knowledge_object`, `resolve_conflicts`
 - Markdown: `memory_synthesis`, `doc_synthesis`, `generate_memory_synthesis`, `generate_doc_synthesis`
-- JSON/plain text: write/admin tools
+- JSON/plain text: write/admin tools and `add_knowledge_object`, `update_knowledge_object`, `delete_knowledge_object`, `capture_from_policy`, `validate_knowledge`
 
 The public MCP server no longer registers the older legacy compatibility tool names, and it does not expose `memory_*` compatibility aliases either. New integrations should use the canonical tool names above.
 

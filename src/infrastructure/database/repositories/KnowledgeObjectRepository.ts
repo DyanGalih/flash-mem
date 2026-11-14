@@ -266,6 +266,13 @@ export class KnowledgeObjectRepository implements IKnowledgeObjectRepository {
       params.push(options.minConfidence);
     }
 
+    if (options.query?.trim()) {
+      const queryLower = options.query.trim().toLowerCase();
+      const queryPattern = `%${queryLower}%`;
+      where.push(`(LOWER(ko.title) LIKE ? OR LOWER(ko.content) LIKE ?)`);
+      params.push(queryPattern, queryPattern);
+    }
+
     const limit = options.limit ?? 100;
 
     const rows = this.db.prepare(`

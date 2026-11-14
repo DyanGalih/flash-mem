@@ -1,0 +1,16 @@
+{
+  "baselines": {
+    "precisionAt10": 0.80,
+    "recallAt20": 0.70,
+    "mrr": 0.85
+  },
+  "thresholds": {
+    "precisionAt10": 0.80,
+    "recallAt20": 0.70,
+    "mrr": 0.85
+  },
+  "performance": {
+    "searchMs": 100,
+    "singleGetMs": 10
+  }
+}

@@ -13,6 +13,7 @@ import { SourceDocumentRepository } from '../../src/infrastructure/database/repo
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
 import { MemoryEntryService } from '../../src/application/services/MemoryEntryService';
 import { MemorySearchService } from '../../src/application/services/MemorySearchService';
+import { WorkspaceStorageResolver } from '../../src/infrastructure/safety/WorkspaceStorageResolver';
 
 describe('Search Memory Integration', () => {
   let db: any;
@@ -20,10 +21,11 @@ describe('Search Memory Integration', () => {
   let entryService: MemoryEntryService;
   let searchService: MemorySearchService;
   const workspaceRoot = path.resolve(__dirname, 'search-memory-workspace');
-  const dbFile = path.join(workspaceRoot, '.flash-mem', 'flashmem.sqlite');
+  const dbFile = WorkspaceStorageResolver.resolveWorkspaceStorage(workspaceRoot).dbPath;
 
   beforeEach(() => {
     fs.removeSync(workspaceRoot);
+    fs.ensureDirSync(workspaceRoot);
     fs.ensureDirSync(path.dirname(dbFile));
     db = createDatabaseConnection(dbFile);
     new SchemaMigrationService(db).ensureCurrentSchema();
@@ -51,6 +53,7 @@ describe('Search Memory Integration', () => {
       db.close();
     }
     fs.removeSync(workspaceRoot);
+    fs.removeSync(path.dirname(dbFile));
   });
 
   it('filters by normalized source path and tag operators', () => {

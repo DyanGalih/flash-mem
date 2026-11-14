@@ -53,6 +53,14 @@ import {
 } from './tools/AiEngineeringExtensionsTools';
 import { createUpdateMemoryTool } from './tools/update-memory';
 import { createUpdateProjectSummaryTool } from './tools/update-project-summary';
+import { createAddKnowledgeObjectTool } from './tools/add-knowledge-object';
+import { createSearchKnowledgeTool } from './tools/search-knowledge';
+import { createGetKnowledgeObjectTool } from './tools/get-knowledge-object';
+import { createUpdateKnowledgeObjectTool } from './tools/update-knowledge-object';
+import { createDeleteKnowledgeObjectTool } from './tools/delete-knowledge-object';
+import { createCaptureFromPolicyTool } from './tools/capture-from-policy';
+import { createResolveConflictsTool } from './tools/resolve-conflicts';
+import { createValidateKnowledgeTool } from './tools/validate-knowledge';
 
 export interface McpServerContext {
     manager: import("./WorkspaceManager").WorkspaceManager;
@@ -102,6 +110,14 @@ export function createMcpServer(context: McpServerContext) {
       const promoteSharedLessonTool = withFormattedResponse(createPromoteSharedLessonTool(manager));
       const syncSharedLessonsTool = withFormattedResponse(createSyncSharedLessonsTool(manager));
       const initializeProjectTool = withFormattedResponse(createInitProjectTool(manager));
+      const addKnowledgeObjectTool = withFormattedResponse(createAddKnowledgeObjectTool(manager));
+      const searchKnowledgeTool = withFormattedResponse(createSearchKnowledgeTool(manager));
+      const getKnowledgeObjectTool = withFormattedResponse(createGetKnowledgeObjectTool(manager));
+      const updateKnowledgeObjectTool = withFormattedResponse(createUpdateKnowledgeObjectTool(manager));
+      const deleteKnowledgeObjectTool = withFormattedResponse(createDeleteKnowledgeObjectTool(manager));
+      const captureFromPolicyTool = withFormattedResponse(createCaptureFromPolicyTool(manager));
+      const resolveConflictsTool = withFormattedResponse(createResolveConflictsTool(manager));
+      const validateKnowledgeTool = withFormattedResponse(createValidateKnowledgeTool(manager));
 
       server
         .registerTool(getProjectSummaryTool)
@@ -123,7 +139,15 @@ export function createMcpServer(context: McpServerContext) {
         .registerTool(tokenReportTool)
         .registerTool(promoteSharedLessonTool)
         .registerTool(syncSharedLessonsTool)
-        .registerTool(initializeProjectTool);
+        .registerTool(initializeProjectTool)
+        .registerTool(addKnowledgeObjectTool)
+        .registerTool(searchKnowledgeTool)
+        .registerTool(getKnowledgeObjectTool)
+        .registerTool(updateKnowledgeObjectTool)
+        .registerTool(deleteKnowledgeObjectTool)
+        .registerTool(captureFromPolicyTool)
+        .registerTool(resolveConflictsTool)
+        .registerTool(validateKnowledgeTool);
 
       return server;
 }

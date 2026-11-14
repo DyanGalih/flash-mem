@@ -5,6 +5,7 @@ import { ProjectSummary, ProjectSummaryInput } from '../entities/ProjectSummary'
 import { Relationship, RelationshipInput } from '../entities/Relationship';
 import { SourceDocument } from '../entities/SourceDocument';
 import { Tag } from '../entities/Tag';
+import { Config } from '../entities/Config';
 
 export interface ITransactionRunner {
   run<T>(work: () => T): T;
@@ -96,6 +97,12 @@ export interface IPathSanitizer {
 
 export interface ICaptureDeduplicationGuard {
   signature(input: { title: string; content: string; category: string }): string;
+}
+
+export interface IConfigService {
+  getConfig(): Config;
+  setConfig(config: Partial<Config>): Config;
+  resetConfig(): Config;
 }
 
 // Knowledge Object Domain (Epic 2)

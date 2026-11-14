@@ -24,6 +24,12 @@ import { SchemaMigrationService } from '../../application/services/SchemaMigrati
 import { SharedLessonService } from '../../application/services/SharedLessonService';
 import { AiEngineeringExtensionsService } from '../../application/services/AiEngineeringExtensionsService';
 import { TokenBudgetService } from '../../application/services/TokenBudgetService';
+import { KnowledgeService } from '../../application/services/KnowledgeService';
+import { HybridSearchService } from '../../application/services/HybridSearchService';
+import { ConfigService } from '../../application/services/ConfigService';
+import { KnowledgeObjectRepository } from '../../infrastructure/database/repositories/KnowledgeObjectRepository';
+import { KnowledgeRelationshipRepository } from '../../infrastructure/database/repositories/KnowledgeRelationshipRepository';
+import { AuthorityChainRepository } from '../../infrastructure/database/repositories/AuthorityChainRepository';
 import { VALID_CATEGORIES } from '../../domain/entities/MemoryEntry';
 import { DetachedMarkdownExportLauncher } from '../../infrastructure/background/DetachedMarkdownExportLauncher';
 import { createDatabaseConnection } from '../../infrastructure/database/connection';
@@ -39,6 +45,7 @@ import { TagRepository } from '../../infrastructure/database/repositories/TagRep
 import { SqliteTransactionRunner } from '../../infrastructure/database/SqliteTransactionRunner';
 import { IndexingInputGuard } from '../../infrastructure/safety/IndexingInputGuard';
 import { PathSanitizer } from '../../infrastructure/safety/PathSanitizer';
+import { WorkspaceStorageResolver } from '../../infrastructure/safety/WorkspaceStorageResolver';
 import { startMcpServer } from '../../mcp/server';
 import { WorkspaceManager } from '../../mcp/WorkspaceManager';
 import { resolveWorkspaceRootForAdd } from './workspace-root';
@@ -124,6 +131,9 @@ interface WorkspaceCompatibilityBundle {
   docSynthesisService: DocSynthesisService;
   sharedLessonService: SharedLessonService;
   tokenBudgetService: TokenBudgetService;
+  knowledgeObjectService: KnowledgeService;
+  hybridSearchService: HybridSearchService;
+  configService: ConfigService;
 }
 
 function formatJsonOutput(payload: unknown): string {
@@ -184,12 +194,8 @@ function normalizePathArg(target: string | undefined, fallback = '.'): string {
 }
 
 function createWorkspaceCompatibilityBundle(workspaceRoot: string): WorkspaceCompatibilityBundle {
-  const dbFile = PathSanitizer.sanitizeSubPath(workspaceRoot, '.flash-mem/flashmem.sqlite');
-  if (!fs.existsSync(dbFile)) {
-    throw new Error(`No SQLite memory store found at "${dbFile}". Run "flash-mem init" first.`);
-  }
-
-  const db = createDatabaseConnection(dbFile);
+  const storageInfo = WorkspaceStorageResolver.ensureWorkspaceStorageInitialized(workspaceRoot);
+  const db = createDatabaseConnection(storageInfo.dbPath);
   const schemaMigrationService = new SchemaMigrationService(db);
   schemaMigrationService.ensureCurrentSchema();
 
@@ -244,6 +250,13 @@ function createWorkspaceCompatibilityBundle(workspaceRoot: string): WorkspaceCom
   void relationshipRepository;
   void memoryEntryService;
 
+  const knowledgeObjectRepo = new KnowledgeObjectRepository(db);
+  const knowledgeRelationshipRepo = new KnowledgeRelationshipRepository(db);
+  const authorityChainRepo = new AuthorityChainRepository(db);
+  const knowledgeObjectService = new KnowledgeService(knowledgeObjectRepo, knowledgeRelationshipRepo, authorityChainRepo, transactionRunner);
+  const hybridSearchService = new HybridSearchService(knowledgeObjectRepo, knowledgeRelationshipRepo);
+  const configService = new ConfigService(workspaceRoot);
+
   return {
     db,
     project,
@@ -253,7 +266,10 @@ function createWorkspaceCompatibilityBundle(workspaceRoot: string): WorkspaceCom
     memorySynthesisService,
     docSynthesisService,
     sharedLessonService,
-    tokenBudgetService: new TokenBudgetService()
+    tokenBudgetService: new TokenBudgetService(),
+    knowledgeObjectService,
+    hybridSearchService,
+    configService
   };
 }
 
@@ -631,6 +647,162 @@ program
   });
 
 program
+  .command('migrate')
+  .description('Run migration operations')
+  .argument('[command]', 'Migration command: backfill')
+  .argument('[path]', 'Workspace path')
+  .option('--dry-run', 'Report planned backfill without writing')
+  .action(async (cmd, dirArg, options) => {
+    try {
+      const workspaceRoot = normalizePathArg(dirArg);
+      const bundle = createWorkspaceCompatibilityBundle(workspaceRoot);
+      const { db, project } = bundle;
+
+      if (cmd === 'backfill') {
+        const rows = db.prepare(`
+          SELECT id, project_id AS projectId, title, content, content_hash AS contentHash,
+                 category, source, confidence, summary, related_files AS relatedFiles,
+                 source_document_id AS sourceDocumentId, created_at AS createdAt,
+                 updated_at AS updatedAt, deleted_at AS deletedAt
+          FROM memory_entries
+          WHERE deleted_at IS NULL
+        `).all() as any[];
+
+        let converted = 0;
+        let skipped = 0;
+
+        for (const row of rows) {
+          const existing = db.prepare(
+            `SELECT id FROM knowledge_objects WHERE project_id = ? AND hash = ?`
+          ).get(project.id, row.contentHash);
+
+          if (existing) { skipped++; continue; }
+
+          if (options.dryRun) { converted++; continue; }
+
+          db.prepare(`
+            INSERT INTO knowledge_objects (
+              id, project_id, knowledge_type, title, content, summary,
+              authority_level, authority_source, confidence,
+              freshness_status, scope_level, capture_method, capture_tool,
+              hash, source_doc_id,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).run(
+            row.id, row.projectId, row.category, row.title, row.content, row.summary,
+            'legacy', row.source, row.confidence,
+            'unknown', 'project', 'deterministic', 'flash-mem-v1-migration',
+            row.contentHash, row.sourceDocumentId,
+            row.createdAt, row.updatedAt
+          );
+          converted++;
+        }
+
+        await writeStdout(JSON.stringify({ converted, skipped, dryRun: !!options.dryRun }, null, 2) + '\n');
+      } else {
+        await writeStderr(`Unknown migrate command: "${cmd}". Use: backfill\n`);
+      }
+    } catch (err: any) {
+      await writeStderr(`Error: ${err.message}\n`);
+    }
+  });
+
+program
+  .command('knowledge')
+  .description('Knowledge object operations')
+  .argument('<action>', 'Action: search, get, add, update, delete')
+  .argument('[id]', 'Knowledge object ID (for get/update/delete)')
+  .option('--title <string>', 'Title (add/update)')
+  .option('--content <string>', 'Content (add/update)')
+  .option('--knowledge-type <string>', 'Knowledge type (add)')
+  .option('--query <string>', 'Search query (search)')
+  .option('--limit <number>', 'Result limit (search)')
+  .option('--change-reason <string>', 'Change reason (update)')
+  .option('--project-path <path>', 'Workspace root path')
+  .action(async (action, id, options) => {
+    try {
+      const workspaceRoot = normalizePathArg(options.projectPath);
+      const bundle = createWorkspaceCompatibilityBundle(workspaceRoot);
+      const service = (bundle as any).knowledgeObjectService;
+
+      let result;
+      switch (action) {
+        case 'search': {
+          const hybrid = (bundle as any).hybridSearchService;
+          result = hybrid.search({ query: options.query, projectId: bundle.project.id, limit: options.limit ? parseInt(options.limit, 10) : 20 });
+          break;
+        }
+        case 'get':
+          result = service.get(id);
+          break;
+        case 'add':
+          result = service.create({
+            projectId: bundle.project.id,
+            knowledgeType: options.knowledgeType,
+            title: options.title,
+            content: options.content,
+          });
+          break;
+        case 'update':
+          result = service.update(id, { title: options.title, content: options.content }, options.changeReason ?? 'CLI update');
+          break;
+        case 'delete':
+          result = service.softDelete(id);
+          break;
+        default:
+          throw new Error(`Unknown action: "${action}". Use: search, get, add, update, delete`);
+      }
+
+      await writeStdout(JSON.stringify(result, null, 2) + '\n');
+    } catch (err: any) {
+      await writeStderr(`Error: ${err.message}\n`);
+    }
+  });
+
+program
+  .command('config')
+  .description('Read and write workspace config')
+  .argument('<action>', 'Action: get, set')
+  .argument('[key]', 'Config key path (dot-separated)')
+  .argument('[value]', 'Config value')
+  .option('--project-path <path>', 'Workspace root path')
+  .action(async (action, key, value, options) => {
+    try {
+      const workspaceRoot = normalizePathArg(options.projectPath);
+      const bundle = createWorkspaceCompatibilityBundle(workspaceRoot);
+      const configService = (bundle as any).configService;
+
+      if (action === 'get') {
+        const config = configService.getConfig();
+        if (!key) {
+          await writeStdout(JSON.stringify(config, null, 2) + '\n');
+        } else {
+          const parts = key.split('.');
+          let current: any = config;
+          for (const part of parts) {
+            current = current?.[part];
+          }
+          await writeStdout(JSON.stringify(current, null, 2) + '\n');
+        }
+      } else if (action === 'set') {
+        const config = configService.getConfig();
+        const parts = key.split('.');
+        let current: any = config;
+        for (let i = 0; i < parts.length - 1; i++) {
+          current = current[parts[i]];
+        }
+        current[parts[parts.length - 1]] = value;
+        const updated = configService.setConfig(config);
+        await writeStdout(JSON.stringify(updated, null, 2) + '\n');
+      } else {
+        throw new Error(`Unknown action: "${action}". Use: get, set`);
+      }
+    } catch (err: any) {
+      await writeStderr(`Error: ${err.message}\n`);
+    }
+  });
+
+program
   .command('update')
   .alias('inject-prompts')
   .description('Update existing Engineering Memory Protocol files in the current workspace and detect the active prompt surface')
@@ -721,12 +893,8 @@ program
       if (!fs.existsSync(workspaceRoot) || !fs.statSync(workspaceRoot).isDirectory()) {
         throw new Error(`Workspace path "${workspaceRoot}" does not exist or is not a directory`);
       }
-      const dbFile = PathSanitizer.sanitizeSubPath(workspaceRoot, '.flash-mem/flashmem.sqlite');
-      if (!fs.existsSync(dbFile)) {
-        throw new Error(`No SQLite memory store found at "${dbFile}"`);
-      }
-
-      const db = createDatabaseConnection(dbFile);
+      const storageInfo = WorkspaceStorageResolver.ensureWorkspaceStorageInitialized(workspaceRoot);
+      const db = createDatabaseConnection(storageInfo.dbPath);
       try {
         new SchemaMigrationService(db).ensureCurrentSchema();
         const service = new MarkdownExportService(
@@ -786,16 +954,12 @@ program
       if (!fs.existsSync(workspaceRoot) || !fs.statSync(workspaceRoot).isDirectory()) {
         throw new Error(`Workspace path "${workspaceRoot}" does not exist or is not a directory`);
       }
-      const dbFile = PathSanitizer.sanitizeSubPath(workspaceRoot, '.flash-mem/flashmem.sqlite');
-      if (!fs.existsSync(dbFile)) {
-        throw new Error(`No SQLite memory store found at "${dbFile}"`);
-      }
-
       if (!confirm) {
         throw new Error(`Rebuilding the index is a destructive operation that clears the database. Run with --yes to confirm.`);
       }
 
-      const db = createDatabaseConnection(dbFile);
+      const storageInfo = WorkspaceStorageResolver.ensureWorkspaceStorageInitialized(workspaceRoot);
+      const db = createDatabaseConnection(storageInfo.dbPath);
       try {
         const projectRepo = new ProjectRepository(db);
         const project = projectRepo.upsertByRootPath(workspaceRoot, path.basename(workspaceRoot));
@@ -1110,14 +1274,9 @@ program
 
       const resolvedWorkspace = resolveWorkspaceRootForAdd(projectPath ?? '.');
 
-      // 2. Resolve database path relative to workspace root (SEC-001)
-      const dbFile = PathSanitizer.sanitizeSubPath(resolvedWorkspace, '.flash-mem/flashmem.sqlite');
-      if (!fs.existsSync(dbFile)) {
-        throw new Error(`No SQLite memory store found at "${dbFile}". Run "flash-mem init" first.`);
-      }
-
-      // 4. Initialize Database and Services
-      const db = createDatabaseConnection(dbFile);
+      // 2. Resolve database path via central storage
+      const storageInfo = WorkspaceStorageResolver.ensureWorkspaceStorageInitialized(resolvedWorkspace);
+      const db = createDatabaseConnection(storageInfo.dbPath);
       try {
         const projectRepo = new ProjectRepository(db);
         const project = projectRepo.upsertByRootPath(resolvedWorkspace, path.basename(resolvedWorkspace));
@@ -1209,12 +1368,8 @@ program
         throw new Error(`Workspace path "${workspaceRoot}" does not exist or is not a directory`);
       }
 
-      const dbFile = PathSanitizer.sanitizeSubPath(workspaceRoot, '.flash-mem/flashmem.sqlite');
-      if (!fs.existsSync(dbFile)) {
-        throw new Error(`No SQLite memory store found at "${dbFile}". Run "flash-mem init" first.`);
-      }
-
-      const db = createDatabaseConnection(dbFile);
+      const storageInfo = WorkspaceStorageResolver.ensureWorkspaceStorageInitialized(workspaceRoot);
+      const db = createDatabaseConnection(storageInfo.dbPath);
       try {
         const projectRepo = new ProjectRepository(db);
         const memoryEntryRepository = new MemoryEntryRepository(db);
@@ -1272,11 +1427,8 @@ program
         throw new Error(`Workspace path "${workspaceRoot}" does not exist or is not a directory`);
       }
 
-      const dbFile = PathSanitizer.sanitizeSubPath(workspaceRoot, '.flash-mem/flashmem.sqlite');
-      if (!fs.existsSync(dbFile)) {
-        const initService = new InitializeProjectService();
-        initService.execute(workspaceRoot);
-      }
+      // We no longer auto-initialize on MCP startup to avoid unexpected side effects
+      // upon IDE reload. Initialization must be done explicitly via CLI or MCP tool.
 
       const manager = new WorkspaceManager();
       await startMcpServer({
@@ -1305,17 +1457,14 @@ program
         throw new Error(`Workspace path "${workspaceRoot}" does not exist or is not a directory`);
       }
 
-      const dbFile = PathSanitizer.sanitizeSubPath(workspaceRoot, '.flash-mem/flashmem.sqlite');
-      if (!fs.existsSync(dbFile)) {
-        throw new Error(`No SQLite memory store found at "${dbFile}". Run "flash-mem init" first.`);
-      }
+      const storageInfo = WorkspaceStorageResolver.ensureWorkspaceStorageInitialized(workspaceRoot);
 
       // Resolve backup directory: explicit arg or default .flash-mem/exports
       const backupDirectory = dirArg
         ? path.resolve(process.cwd(), dirArg)
         : PathSanitizer.sanitizeSubPath(workspaceRoot, '.flash-mem/exports');
 
-      const db = createDatabaseConnection(dbFile);
+      const db = createDatabaseConnection(storageInfo.dbPath);
       try {
         const service = new MarkdownRestoreService(
           new ProjectRepository(db),

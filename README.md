@@ -46,6 +46,18 @@ It is designed to help engineers and AI agents:
 - keep retrieval-first workflows before code changes
 - preserve context for agent-assisted development and SDD
 
+### Flash-mem 1.0 Capabilities
+
+Flash-mem 1.0 adds structured **knowledge objects** on top of legacy memory entries:
+- **Typed knowledge**: decisions, constraints, conventions, patterns, risks, dependencies, integrations, specs, lessons, insights
+- **Authority-aware retrieval**: hybrid FTS5 + lexical search with authority/confidence/recency ranking
+- **Relationship graph walk**: expand results through typed relationships with decay scoring
+- **Deterministic capture pipeline**: extract from Architecture Guard policies and Spec Kit markdown sections
+- **New MCP tools**: `search_knowledge`, `get_knowledge_object`, `add_knowledge_object`, `update_knowledge_object`, `delete_knowledge_object`, `capture_from_policy`, `resolve_conflicts`, `validate_knowledge`
+- **Backward compatible**: legacy `search_memory`/`add_memory` continue to work via the `entries_v2` unified view
+
+See `docs/architecture.md`, `docs/migration-1.0.md`, and `docs/toon-format.md` for details.
+
 If you are using AI for **vibe coding**, **AI engineering workflows** (including spec-driven development like using **Spec-Kit**), or as a pair-programming partner, `flash-mem` helps keep the model grounded in your actual codebase instead of guessing from scratch every session.
 
 Recent updates also expanded the MCP surface with compact response formatting and compatibility helpers, which makes memory retrieval cheaper to read and easier to reuse in longer sessions.

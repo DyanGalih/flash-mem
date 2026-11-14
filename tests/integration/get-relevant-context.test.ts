@@ -8,14 +8,18 @@ import { SchemaMigrationService } from '../../src/application/services/SchemaMig
 import { ProjectRepository } from '../../src/infrastructure/database/repositories/ProjectRepository';
 import { createMcpServer } from '../../src/mcp/server';
 import { decodeToon } from '../../src/infrastructure/llm/toon';
+import { WorkspaceStorageResolver } from '../../src/infrastructure/safety/WorkspaceStorageResolver';
 
 describe('get_relevant_context tool integration', () => {
   let db: any;
-  const testDbFile = path.resolve(__dirname, 'get-relevant-context-workspace', '.flash-mem', 'flashmem.sqlite');
-  const workspaceRoot = path.dirname(path.dirname(testDbFile));
+  const workspaceRoot = path.resolve(__dirname, 'get-relevant-context-workspace');
+  const testDbFile = WorkspaceStorageResolver.resolveWorkspaceStorage(workspaceRoot).dbPath;
 
   beforeEach(() => {
+    fs.removeSync(workspaceRoot);
+    fs.ensureDirSync(workspaceRoot);
     fs.removeSync(path.dirname(testDbFile));
+    fs.ensureDirSync(path.dirname(testDbFile));
     db = createDatabaseConnection(testDbFile);
     new SchemaMigrationService(db).ensureCurrentSchema();
   });
@@ -24,6 +28,7 @@ describe('get_relevant_context tool integration', () => {
     if (db) {
       db.close();
     }
+    fs.removeSync(workspaceRoot);
     fs.removeSync(path.dirname(testDbFile));
   });
 

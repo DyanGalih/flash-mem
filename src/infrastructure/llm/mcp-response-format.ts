@@ -1,6 +1,6 @@
 import { encodeToon } from './toon';
 
-export type McpToolResponseFormat = 'json' | 'toon' | 'markdown';
+export type McpToolResponseFormat = 'json' | 'toon' | 'markdown' | 'toon-compact';
 
 type TextContent = {
   type: 'text';
@@ -11,6 +11,40 @@ type ToolContentResponse = {
   content: TextContent[];
   isError?: boolean;
 };
+
+const COMPACT_FIELD_MAP: Record<string, string> = {
+  id: 'id',
+  title: 't',
+  summary: 's',
+  content: 'c',
+  contentHash: 'ch',
+  knowledgeType: 'kt',
+  category: 'cat',
+  authorityLevel: 'auth',
+  confidence: 'conf',
+  score: 'sc',
+  createdAt: 'ca',
+  updatedAt: 'ua',
+  projectId: 'pid',
+  source: 'src',
+  tags: 'tags',
+};
+
+function projectToCompact(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(projectToCompact);
+  }
+
+  if (value && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(value as Record<string, unknown>)) {
+      result[COMPACT_FIELD_MAP[key] ?? key] = projectToCompact(val);
+    }
+    return result;
+  }
+
+  return value;
+}
 
 function hasContentResponse(value: unknown): value is ToolContentResponse {
   return !!value
@@ -58,6 +92,8 @@ export async function formatMcpToolResult(
   let text: string;
   if (responseFormat === 'toon') {
     text = await encodeToon(value);
+  } else if (responseFormat === 'toon-compact') {
+    text = await encodeToon(projectToCompact(value));
   } else if (responseFormat === 'markdown') {
     text = extractMarkdownText(value);
   } else {

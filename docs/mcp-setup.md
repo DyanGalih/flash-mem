@@ -266,3 +266,20 @@ This is the most explicit option and is useful when debugging path or environmen
 ## Important Notes
 
 - Treat each repository as its own workspace: run `flash-mem init .` in that repo so summaries and memory entries stay project-scoped.
+
+## Knowledge Tools (Flash-mem 1.0)
+
+In addition to the legacy `memory_*` tools, Flash-mem 1.0 registers knowledge-object tools:
+
+| Tool | Response Format | Purpose |
+| --- | --- | --- |
+| `search_knowledge` | TOON | Hybrid FTS5 + lexical search with authority ranking |
+| `get_knowledge_object` | TOON | Fetch a single knowledge object by ID |
+| `add_knowledge_object` | JSON | Create a typed knowledge object |
+| `update_knowledge_object` | JSON | Update with provenance tracking |
+| `delete_knowledge_object` | JSON | Soft delete with audit trail |
+| `capture_from_policy` | JSON | Extract knowledge from Architecture Guard policies |
+| `resolve_conflicts` | TOON | Find knowledge objects with `conflicts_with` relationships |
+| `validate_knowledge` | JSON | Run freshness and authority checks on knowledge objects |
+
+All knowledge tools require a `project_path` parameter pointing at the workspace root.

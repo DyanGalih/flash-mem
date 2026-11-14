@@ -14,6 +14,7 @@ import { RelationshipRepository } from '../../src/infrastructure/database/reposi
 import { SourceDocumentRepository } from '../../src/infrastructure/database/repositories/SourceDocumentRepository';
 import { TagRepository } from '../../src/infrastructure/database/repositories/TagRepository';
 import { SqliteTransactionRunner } from '../../src/infrastructure/database/SqliteTransactionRunner';
+import { WorkspaceStorageResolver } from '../../src/infrastructure/safety/WorkspaceStorageResolver';
 
 async function exportWorkspace(workspaceRoot: string, dbFile: string): Promise<string> {
   const db = createDatabaseConnection(dbFile);
@@ -42,12 +43,13 @@ describe('Markdown Restore — Integration (export → restore cycle)', () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'flash-mem-restore-integration-'));
     workspaceRoot = path.join(tmpDir, 'workspace');
     fs.ensureDirSync(workspaceRoot);
-    dbFile = path.join(workspaceRoot, '.flash-mem', 'flashmem.sqlite');
+    dbFile = WorkspaceStorageResolver.resolveWorkspaceStorage(workspaceRoot).dbPath;
     fs.ensureDirSync(path.dirname(dbFile));
   });
 
   afterEach(() => {
     fs.removeSync(tmpDir);
+    fs.removeSync(path.dirname(dbFile));
   });
 
   it('restores all exported entries after database deletion', async () => {

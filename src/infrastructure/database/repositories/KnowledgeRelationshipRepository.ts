@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3';
-import { KnowledgeRelationship, KnowledgeRelationshipInput, KnowledgeRelationshipSchema } from '../../../domain/entities/KnowledgeRelationship';
+import { KnowledgeRelationship, KnowledgeRelationshipInput, KnowledgeRelationshipInputSchema, KnowledgeRelationshipSchema } from '../../../domain/entities/KnowledgeRelationship';
 import { IKnowledgeRelationshipRepository } from '../../../domain/repositories/interfaces';
 import { createId, now } from '../helpers';
 
@@ -21,6 +21,7 @@ export class KnowledgeRelationshipRepository implements IKnowledgeRelationshipRe
   }
 
   public upsert(projectId: string, sourceId: string, input: KnowledgeRelationshipInput): KnowledgeRelationship {
+    const validated = KnowledgeRelationshipInputSchema.parse(input);
     const timestamp = now();
     const id = createId();
 
@@ -28,7 +29,7 @@ export class KnowledgeRelationshipRepository implements IKnowledgeRelationshipRe
       SELECT id FROM knowledge_rels
       WHERE project_id = ? AND source_id = ? AND target_id = ? AND rel_type = ?
       LIMIT 1
-    `).get(projectId, input.sourceId, input.targetId, input.relType) as { id?: string } | undefined;
+    `).get(projectId, validated.sourceId, validated.targetId, validated.relType) as { id?: string } | undefined;
 
     const relId = existing?.id ?? id;
 
@@ -39,9 +40,9 @@ export class KnowledgeRelationshipRepository implements IKnowledgeRelationshipRe
     `).run(
       relId,
       projectId,
-      input.sourceId,
-      input.targetId,
-      input.relType,
+      validated.sourceId,
+      validated.targetId,
+      validated.relType,
       timestamp
     );
 
@@ -49,8 +50,8 @@ export class KnowledgeRelationshipRepository implements IKnowledgeRelationshipRe
       id: relId,
       projectId,
       sourceId,
-      targetId: input.targetId,
-      relType: input.relType,
+      targetId: validated.targetId,
+      relType: validated.relType,
       createdAt: timestamp
     });
   }

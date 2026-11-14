@@ -18,6 +18,14 @@ import { SharedLessonService } from '../application/services/SharedLessonService
 import { AiEngineeringExtensionsService } from '../application/services/AiEngineeringExtensionsService';
 import { TokenBudgetService } from '../application/services/TokenBudgetService';
 import { WorkspaceIndexingService } from '../application/services/WorkspaceIndexingService';
+import { ConfigService } from '../application/services/ConfigService';
+import { HybridSearchService } from '../application/services/HybridSearchService';
+import { CaptureOrchestrator } from '../application/services/CaptureOrchestrator';
+import { ExtractionRuleRegistry } from '../domain/entities/ExtractionRule';
+import { KnowledgeService } from '../application/services/KnowledgeService';
+import { KnowledgeObjectRepository } from '../infrastructure/database/repositories/KnowledgeObjectRepository';
+import { KnowledgeRelationshipRepository } from '../infrastructure/database/repositories/KnowledgeRelationshipRepository';
+import { AuthorityChainRepository } from '../infrastructure/database/repositories/AuthorityChainRepository';
 import { Project } from '../domain/entities/Project';
 import { DetachedMarkdownExportLauncher } from '../infrastructure/background/DetachedMarkdownExportLauncher';
 import { createDatabaseConnection } from '../infrastructure/database/connection';
@@ -35,6 +43,7 @@ import { ArtifactReader } from '../infrastructure/markdown/ArtifactReader';
 import { CaptureDeduplicationGuard } from '../infrastructure/safety/CaptureDeduplicationGuard';
 import { PathSanitizer } from '../infrastructure/safety/PathSanitizer';
 import { SecretScanner } from '../infrastructure/safety/SecretScanner';
+import { WorkspaceStorageResolver } from '../infrastructure/safety/WorkspaceStorageResolver';
 
 export interface WorkspaceBundle {
   workspaceRoot: string;
@@ -54,6 +63,11 @@ export interface WorkspaceBundle {
   sharedLessonService: SharedLessonService;
   compatibilityService: AiEngineeringExtensionsService;
   workspaceIndexingService: WorkspaceIndexingService;
+  configService: ConfigService;
+  knowledgeRelationshipRepo: KnowledgeRelationshipRepository;
+  captureOrchestrator: CaptureOrchestrator;
+  hybridSearchService: HybridSearchService;
+  knowledgeObjectService: KnowledgeService;
 }
 
 export class WorkspaceManager {
@@ -69,12 +83,8 @@ export class WorkspaceManager {
       throw new Error(`Workspace path "${workspaceRoot}" does not exist or is not a directory`);
     }
 
-    const dbFile = PathSanitizer.sanitizeSubPath(workspaceRoot, '.flash-mem/flashmem.sqlite');
-    if (!fs.existsSync(dbFile)) {
-      throw new Error(`No SQLite memory store found at "${dbFile}". Run "flash-mem init" first in this workspace.`);
-    }
-
-    const db = createDatabaseConnection(dbFile);
+    const storageInfo = WorkspaceStorageResolver.ensureWorkspaceStorageInitialized(workspaceRoot);
+    const db = createDatabaseConnection(storageInfo.dbPath);
     const schemaMigrationService = new SchemaMigrationService(db);
     schemaMigrationService.ensureCurrentSchema();
 
@@ -174,6 +184,15 @@ export class WorkspaceManager {
       indexingService,
       projectRepository
     );
+    const configService = new ConfigService(workspaceRoot);
+
+    const knowledgeObjectRepo = new KnowledgeObjectRepository(db);
+    const knowledgeRelationshipRepo = new KnowledgeRelationshipRepository(db);
+    const authorityChainRepo = new AuthorityChainRepository(db);
+    const knowledgeService = new KnowledgeService(knowledgeObjectRepo, knowledgeRelationshipRepo, authorityChainRepo, transactionRunner);
+    const registry = new ExtractionRuleRegistry();
+    const captureOrchestrator = new CaptureOrchestrator(registry, knowledgeService);
+    const hybridSearchService = new HybridSearchService(knowledgeObjectRepo, knowledgeRelationshipRepo);
 
     const bundle: WorkspaceBundle = {
       workspaceRoot,
@@ -192,7 +211,12 @@ export class WorkspaceManager {
       docSynthesisService,
       sharedLessonService,
       compatibilityService,
-      workspaceIndexingService
+      workspaceIndexingService,
+      configService,
+      captureOrchestrator,
+      hybridSearchService,
+      knowledgeObjectService: knowledgeService,
+      knowledgeRelationshipRepo,
     };
 
     this.bundles.set(workspaceRoot, bundle);
