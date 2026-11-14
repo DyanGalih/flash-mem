@@ -44,18 +44,20 @@ export class CaptureOrchestrator {
     return persisted !== null;
   }
 
-  private discoverFiles(root: string, pattern: string): string[] {
+  private discoverFiles(root: string, pattern: string, baseRoot: string = root): string[] {
     const files: string[] = [];
     try {
       const entries = fs.readdirSync(root, { withFileTypes: true });
       for (const entry of entries) {
         const fullPath = path.join(root, entry.name);
-        if (entry.isDirectory() && !entry.name.startsWith('.')) {
-          files.push(...this.discoverFiles(fullPath, pattern));
+        if (entry.isDirectory() && (!entry.name.startsWith('.') || entry.name === '.architecture-guard')) {
+          files.push(...this.discoverFiles(fullPath, pattern, baseRoot));
         } else if (entry.isFile()) {
-          const relative = path.relative(root, fullPath);
+          const relative = path.relative(baseRoot, fullPath);
           const patternRegex = pattern
             .replace(/\./g, '\\.')
+            .replace(/\{([^}]+)\}/g, (_, choices) => `(?:${choices.split(',').join('|')})`)
+            .replace(/\*\*\//g, '(?:.*\\/)?')
             .replace(/\*\*/g, '.*')
             .replace(/\*/g, '[^/]*');
           if (new RegExp(patternRegex, 'i').test(relative)) {

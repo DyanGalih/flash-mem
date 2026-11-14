@@ -35,8 +35,8 @@ export function createAddKnowledgeObjectTool(manager: WorkspaceManager) {
       });
 
       return {
-        success: created !== null,
-        alreadyExists: created === null,
+        success: created,
+        alreadyExists: !created,
       };
     }
   };

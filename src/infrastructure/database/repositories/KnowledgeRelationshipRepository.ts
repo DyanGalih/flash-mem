@@ -49,7 +49,7 @@ export class KnowledgeRelationshipRepository implements IKnowledgeRelationshipRe
     return KnowledgeRelationshipSchema.parse({
       id: relId,
       projectId,
-      sourceId,
+      sourceId: validated.sourceId,
       targetId: validated.targetId,
       relType: validated.relType,
       createdAt: timestamp

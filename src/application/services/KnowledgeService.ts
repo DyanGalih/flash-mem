@@ -41,7 +41,7 @@ export class KnowledgeService {
   ): KnowledgeObject | null {
     return this.transactionRunner.run(() => {
       const existing = this.knowledgeRepo.findById(id);
-      if (!existing) return null;
+      if (!existing || (existing.deletedAt !== null && existing.deletedAt !== undefined)) return null;
 
       this.authorityRepo.append(existing.projectId, {
         objectId: id,
@@ -65,7 +65,7 @@ export class KnowledgeService {
   private knowledgeHash(input: KnowledgeObjectInput): string {
     const { createHash } = require('node:crypto') as typeof import('node:crypto');
     return createHash('sha256')
-      .update(input.knowledgeType + input.title + input.content + input.authorityLevel)
+      .update(JSON.stringify([input.knowledgeType, input.title, input.content, input.authorityLevel ?? 'provisional']))
       .digest('hex');
   }
 }

@@ -16,15 +16,13 @@ MCP Client (LLM)  ←  TOON text  ←  MCP Server (encodeToon)
                                    SQLite (normalized)
 ```
 
-## Schema Versioning
+## Response Envelope
 
-Every TOON-encoded response carries a schema version field:
+Search responses formatted for MCP return the standard retrieval envelope:
 
+```json
+{ "results": [...], "totalCount": 10, "hasMore": false }
 ```
-{ "v": "1.0", "type": "search_result", "results": [...] }
-```
-
-TOON schemas evolve via additive fields only. The codec is lenient to unknown fields.
 
 ## Token Efficiency Patterns
 

@@ -190,6 +190,14 @@ export class KnowledgeObjectRepository implements IKnowledgeObjectRepository {
     fields.push('freshness_validated_at = ?');
     params.push(timestamp);
 
+    KnowledgeObjectSchema.parse({
+      ...existing,
+      ...Object.fromEntries(Object.entries(input).filter(([, v]) => v !== undefined)),
+      hash: newHash,
+      updatedAt: timestamp,
+      freshnessValidatedAt: timestamp,
+    });
+
     params.push(id);
     this.db.prepare(`
       UPDATE knowledge_objects
@@ -324,10 +332,10 @@ export class KnowledgeObjectRepository implements IKnowledgeObjectRepository {
     );
   }
 
-  private computeHash(input: { knowledgeType: string; title: string; content: string; authorityLevel: string }): string {
+  private computeHash(input: { knowledgeType: string; title: string; content: string; authorityLevel?: string }): string {
     const { createHash } = require('node:crypto') as typeof import('node:crypto');
     return createHash('sha256')
-      .update(input.knowledgeType + input.title + input.content + input.authorityLevel)
+      .update(JSON.stringify([input.knowledgeType, input.title, input.content, input.authorityLevel ?? 'provisional']))
       .digest('hex');
   }
 
@@ -351,6 +359,18 @@ export class KnowledgeObjectRepository implements IKnowledgeObjectRepository {
       where.push('knowledge_fts.project_id = ?');
       params.push(options.projectId);
     }
+    if (options.knowledgeType) {
+      where.push('ko.knowledge_type = ?');
+      params.push(options.knowledgeType);
+    }
+    if (options.minConfidence != null) {
+      where.push('ko.confidence >= ?');
+      params.push(options.minConfidence);
+    }
+    if (options.authorityLevel) {
+      where.push('ko.authority_level = ?');
+      params.push(options.authorityLevel);
+    }
 
     const limit = options.limit ?? 100;
     const rows = this.db.prepare(`
@@ -370,7 +390,7 @@ export class KnowledgeObjectRepository implements IKnowledgeObjectRepository {
         ko.created_at AS createdAt, ko.updated_at AS updatedAt, ko.deleted_at AS deletedAt,
         rank
       FROM knowledge_fts
-      JOIN knowledge_objects ko ON ko.rowid = knowledge_fts.rowid
+      JOIN knowledge_objects ko ON ko.id = knowledge_fts.entry_id
       WHERE ${where.join(' AND ')} AND ko.deleted_at IS NULL
       ORDER BY rank
       LIMIT ?

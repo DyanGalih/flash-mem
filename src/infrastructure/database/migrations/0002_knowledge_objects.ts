@@ -98,7 +98,7 @@ export function initializeKnowledgeObjectSchema(db: Database.Database): void {
     }
 
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_knowledge_objects_project_type ON knowledge_objects(project_id, knowledge_type)`).run();
-    db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_objects_hash ON knowledge_objects(hash)`).run();
+    db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_knowledge_objects_hash ON knowledge_objects(project_id, hash)`).run();
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_knowledge_objects_authority ON knowledge_objects(project_id, authority_level)`).run();
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_knowledge_objects_freshness ON knowledge_objects(freshness_status)`).run();
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_knowledge_objects_deleted ON knowledge_objects(deleted_at)`).run();

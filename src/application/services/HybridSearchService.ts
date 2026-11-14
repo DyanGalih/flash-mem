@@ -70,6 +70,8 @@ export class HybridSearchService {
     if (ranked.some((r) => r.id === id)) continue;
     const obj = this.knowledgeRepo.findById(id);
     if (obj && !obj.deletedAt) {
+      if (options.knowledgeType && obj.knowledgeType !== options.knowledgeType) continue;
+      if (options.minConfidence !== null && options.minConfidence !== undefined && (obj.confidence ?? 0) < options.minConfidence) continue;
       ranked.push({
         ...obj,
         tags: [],
@@ -79,6 +81,8 @@ export class HybridSearchService {
       });
     }
   }
+
+  ranked.sort((a, b) => b.score - a.score);
 
     const hasMore = ranked.length > limit;
     const sliced = ranked.slice(0, limit);

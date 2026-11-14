@@ -27,11 +27,17 @@ Discover policy files
 
 ## Trigger
 
-```bash
-flash-mem migrate backfill .   # captures + backfills
-# or via MCP:
-#   capture_from_policy { project_path: ... }
+Capture policy files via MCP:
+```json
+{
+  "name": "capture_from_policy",
+  "arguments": {
+    "project_path": "."
+  }
+}
 ```
+
+> Note: `flash-mem migrate backfill` converts legacy memory entries to knowledge objects; policy files are captured via the `capture_from_policy` MCP tool.
 
 ## Idempotency
 

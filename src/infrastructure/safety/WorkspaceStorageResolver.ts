@@ -45,9 +45,10 @@ export class WorkspaceStorageResolver {
    */
   public static computeWorkspaceId(canonicalRoot: string): string {
     const resolvedRoot = PathSanitizer.resolveRoot(canonicalRoot);
-    const rawBase = path.basename(resolvedRoot).toLowerCase().replace(/[^a-z0-9_-]/g, '_') || 'workspace';
+    const realRoot = fs.existsSync(resolvedRoot) ? fs.realpathSync.native(resolvedRoot) : resolvedRoot;
+    const rawBase = path.basename(realRoot).toLowerCase().replace(/[^a-z0-9_-]/g, '_') || 'workspace';
     const slug = rawBase.slice(0, 32);
-    const hash = crypto.createHash('sha256').update(resolvedRoot).digest('hex').slice(0, 8);
+    const hash = crypto.createHash('sha256').update(realRoot).digest('hex').slice(0, 8);
     return `${slug}-${hash}`;
   }
 
@@ -57,7 +58,8 @@ export class WorkspaceStorageResolver {
    */
   public static resolveWorkspaceStorage(workspaceRootInput: string): WorkspaceStorageInfo {
     const resolvedRoot = PathSanitizer.resolveRoot(workspaceRootInput);
-    const workspaceId = this.computeWorkspaceId(resolvedRoot);
+    const realRoot = fs.existsSync(resolvedRoot) ? fs.realpathSync.native(resolvedRoot) : resolvedRoot;
+    const workspaceId = this.computeWorkspaceId(realRoot);
     const workspaceDir = path.join(this.getWorkspacesDirectory(), workspaceId);
     const dbPath = path.join(workspaceDir, 'flashmem.sqlite');
     const metadataPath = path.join(workspaceDir, 'workspace.json');
@@ -77,6 +79,7 @@ export class WorkspaceStorageResolver {
   public static ensureWorkspaceStorageInitialized(workspaceRootInput: string): WorkspaceStorageInfo {
     const info = this.resolveWorkspaceStorage(workspaceRootInput);
     const resolvedRoot = PathSanitizer.resolveRoot(workspaceRootInput);
+    const realRoot = fs.existsSync(resolvedRoot) ? fs.realpathSync.native(resolvedRoot) : resolvedRoot;
 
     if (!fs.existsSync(info.workspaceDir)) {
       fs.ensureDirSync(info.workspaceDir);
@@ -96,16 +99,16 @@ export class WorkspaceStorageResolver {
         metadata.lastAccessedAt = now;
       } catch {
         metadata = {
-          rootPath: resolvedRoot,
-          name: path.basename(resolvedRoot),
+          rootPath: realRoot,
+          name: path.basename(realRoot),
           createdAt: now,
           lastAccessedAt: now,
         };
       }
     } else {
       metadata = {
-        rootPath: resolvedRoot,
-        name: path.basename(resolvedRoot),
+        rootPath: realRoot,
+        name: path.basename(realRoot),
         createdAt: now,
         lastAccessedAt: now,
       };

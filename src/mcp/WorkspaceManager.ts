@@ -21,6 +21,8 @@ import { WorkspaceIndexingService } from '../application/services/WorkspaceIndex
 import { ConfigService } from '../application/services/ConfigService';
 import { HybridSearchService } from '../application/services/HybridSearchService';
 import { CaptureOrchestrator } from '../application/services/CaptureOrchestrator';
+import { architectureGuardExtractorRule } from '../infrastructure/capture/ArchitectureGuardExtractor';
+import { specKitExtractorRule } from '../infrastructure/capture/SpecKitExtractor';
 import { ExtractionRuleRegistry } from '../domain/entities/ExtractionRule';
 import { KnowledgeService } from '../application/services/KnowledgeService';
 import { KnowledgeObjectRepository } from '../infrastructure/database/repositories/KnowledgeObjectRepository';
@@ -191,6 +193,8 @@ export class WorkspaceManager {
     const authorityChainRepo = new AuthorityChainRepository(db);
     const knowledgeService = new KnowledgeService(knowledgeObjectRepo, knowledgeRelationshipRepo, authorityChainRepo, transactionRunner);
     const registry = new ExtractionRuleRegistry();
+    registry.register(specKitExtractorRule);
+    registry.register(architectureGuardExtractorRule);
     const captureOrchestrator = new CaptureOrchestrator(registry, knowledgeService);
     const hybridSearchService = new HybridSearchService(knowledgeObjectRepo, knowledgeRelationshipRepo);
 

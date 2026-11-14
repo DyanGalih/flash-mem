@@ -27,6 +27,8 @@ export class ExtractionRuleRegistry {
     for (const rule of this.rules.values()) {
       const pattern = rule.filePattern
         .replace(/\./g, '\\.')
+        .replace(/\{([^}]+)\}/g, (_, choices) => `(?:${choices.split(',').join('|')})`)
+        .replace(/\*\*\//g, '(?:.*\\/)?')
         .replace(/\*\*/g, '.*')
         .replace(/\*/g, '[^/]*');
       if (new RegExp(pattern, 'i').test(filePath)) {

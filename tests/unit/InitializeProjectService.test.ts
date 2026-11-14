@@ -1,4 +1,5 @@
 import * as fs from 'fs-extra';
+import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { InitializeProjectService } from '../../src/application/services/InitializeProjectService';
@@ -7,14 +8,24 @@ import { WorkspaceStorageResolver } from '../../src/infrastructure/safety/Worksp
 describe('InitializeProjectService Unit', () => {
   const service = new InitializeProjectService();
   const testWorkspace = path.resolve(__dirname, 'test-workspace-service');
+  const originalFlashMemHome = process.env.FLASH_MEM_HOME;
+  let centralHome: string;
 
   beforeEach(() => {
     fs.removeSync(testWorkspace);
     fs.ensureDirSync(testWorkspace);
+    centralHome = fs.mkdtempSync(path.join(os.tmpdir(), 'flash-mem-central-'));
+    process.env.FLASH_MEM_HOME = centralHome;
   });
 
   afterEach(() => {
     fs.removeSync(testWorkspace);
+    if (originalFlashMemHome === undefined) {
+      delete process.env.FLASH_MEM_HOME;
+    } else {
+      process.env.FLASH_MEM_HOME = originalFlashMemHome;
+    }
+    fs.removeSync(centralHome);
   });
 
   it('should initialize a fresh workspace with folders, metadata, and database', () => {

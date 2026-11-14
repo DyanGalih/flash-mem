@@ -680,6 +680,8 @@ program
 
           if (options.dryRun) { converted++; continue; }
 
+          const ftsRepo = new KnowledgeObjectRepository(db);
+
           db.prepare(`
             INSERT INTO knowledge_objects (
               id, project_id, knowledge_type, title, content, summary,
@@ -690,11 +692,12 @@ program
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(
             row.id, row.projectId, row.category, row.title, row.content, row.summary,
-            'legacy', row.source, row.confidence,
+            'provisional', row.source, row.confidence,
             'unknown', 'project', 'deterministic', 'flash-mem-v1-migration',
             row.contentHash, row.sourceDocumentId,
             row.createdAt, row.updatedAt
           );
+          ftsRepo.refreshFtsIndex(row.id);
           converted++;
         }
 
@@ -791,7 +794,21 @@ program
         for (let i = 0; i < parts.length - 1; i++) {
           current = current[parts[i]];
         }
-        current[parts[parts.length - 1]] = value;
+        const leaf = parts[parts.length - 1];
+        if (typeof current[leaf] === 'boolean') {
+          if (value !== 'true' && value !== 'false') {
+            throw new Error(`"${key}" expects "true" or "false"`);
+          }
+          current[leaf] = value === 'true';
+        } else if (typeof current[leaf] === 'number') {
+          const numeric = Number(value);
+          if (value.trim() === '' || Number.isNaN(numeric)) {
+            throw new Error(`"${key}" expects a number`);
+          }
+          current[leaf] = numeric;
+        } else {
+          current[leaf] = value;
+        }
         const updated = configService.setConfig(config);
         await writeStdout(JSON.stringify(updated, null, 2) + '\n');
       } else {

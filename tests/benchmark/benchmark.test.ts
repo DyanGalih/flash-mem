@@ -68,6 +68,9 @@ describe('Full benchmark against seed dataset', () => {
     const mrr = meanReciprocalRank(mrrInputs);
 
     console.log(`benchmark: precision@10=${precision10.toFixed(3)} recall@20=${recall20.toFixed(3)} mrr=${mrr.toFixed(3)}`);
+    expect(precision10).toBeGreaterThanOrEqual(config.thresholds.precisionAt10);
+    expect(recall20).toBeGreaterThanOrEqual(config.thresholds.recallAt20);
+    expect(mrr).toBeGreaterThanOrEqual(config.thresholds.mrr);
     db.close();
   });
 });

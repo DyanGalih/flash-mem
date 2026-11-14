@@ -16,9 +16,15 @@ function splitSections(markdown: string): Section[] {
   let currentHeading = 'preamble';
   let currentLevel = 0;
   let currentContent: string[] = [];
+  let inCodeBlock = false;
 
   for (const line of lines) {
-    const headingMatch = line.match(/^(#{2,3})\s+(.+)/);
+    if (line.trim().startsWith('```')) {
+      inCodeBlock = !inCodeBlock;
+      currentContent.push(line);
+      continue;
+    }
+    const headingMatch = !inCodeBlock ? line.match(/^(#{2,3})\s+(.+)/) : null;
     if (headingMatch) {
       if (currentContent.length > 0) {
         sections.push({ heading: currentHeading, level: currentLevel, content: currentContent.join('\n').trim() });

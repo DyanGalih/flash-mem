@@ -22,9 +22,10 @@ export function createSearchMemoryTool(manager: WorkspaceManager) {
     execute: (input: z.infer<typeof searchMemoryInputSchema>) => {
       const bundle = manager.getBundle(input.project_path);
 
-      // Hybrid search when query provided and knowledge objects exist; fallback to legacy otherwise
+      // Hybrid search when query provided, no legacy-only filters requested, and knowledge objects exist; fallback to legacy otherwise
+      const hasLegacyFilters = Boolean(input.category || (input.tags && input.tags.length > 0) || input.tagOperator || input.source);
       const hybrid = (bundle as any).hybridSearchService;
-      if (hybrid && input.query) {
+      if (!hasLegacyFilters && hybrid && input.query) {
         try {
           const knowledgeResults = hybrid.search({
             query: input.query,

@@ -24,7 +24,7 @@ export class ConfigService implements IConfigService {
     } catch {
       // If config file is invalid or missing, return defaults
     }
-    return DEFAULT_CONFIG;
+    return ConfigSchema.parse({});
   }
 
   public setConfig(config: Partial<Config>): Config {
@@ -38,8 +38,9 @@ export class ConfigService implements IConfigService {
   }
 
   public resetConfig(): Config {
+    const defaults = ConfigSchema.parse({});
     fs.ensureDirSync(path.dirname(this.configPath));
-    fs.writeFileSync(this.configPath, JSON.stringify(DEFAULT_CONFIG, null, 2), 'utf-8');
-    return DEFAULT_CONFIG;
+    fs.writeFileSync(this.configPath, JSON.stringify(defaults, null, 2), 'utf-8');
+    return defaults;
   }
 }
